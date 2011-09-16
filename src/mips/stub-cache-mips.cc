@@ -2551,7 +2551,12 @@ MaybeObject* CallStubCompiler::CompileCallGlobal(JSObject* object,
       ? CALL_AS_FUNCTION
       : CALL_AS_METHOD;
   if (V8::UseCrankshaft()) {
-    UNIMPLEMENTED_MIPS();
+    // TODO(kasperl): For now, we always call indirectly through the
+    // code field in the function to allow recompilation to take effect
+    // without changing any of the call sites.
+    __ lw(a3, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
+    __ InvokeCode(a3, expected, arguments(), JUMP_FUNCTION,
+                  NullCallWrapper(), call_kind);
   } else {
     __ InvokeCode(code, expected, arguments(), RelocInfo::CODE_TARGET,
                   JUMP_FUNCTION, call_kind);
@@ -3828,7 +3833,6 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
   __ lw(a3, FieldMemOperand(receiver, JSObject::kElementsOffset));
 
   // Check that the index is in range.
-  __ SmiUntag(t0, key);
   __ lw(t1, FieldMemOperand(a3, ExternalArray::kLengthOffset));
   // Unsigned comparison catches both negative and too-large values.
   __ Branch(&miss_force_generic, Ugreater_equal, key, Operand(t1));
@@ -3836,7 +3840,6 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
   // Handle both smis and HeapNumbers in the fast path. Go to the
   // runtime for all other kinds of values.
   // a3: external array.
-  // t0: key (integer).
 
   if (elements_kind == EXTERNAL_PIXEL_ELEMENTS) {
     // Double to pixel conversion is only implemented in the runtime for now.
@@ -3848,7 +3851,6 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
   __ lw(a3, FieldMemOperand(a3, ExternalArray::kExternalPointerOffset));
 
   // a3: base pointer of external storage.
-  // t0: key (integer).
   // t1: value (integer).
 
   switch (elements_kind) {
@@ -3865,33 +3867,36 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
       __ mov(v0, t1);  // Value is in range 0..255.
       __ bind(&done);
       __ mov(t1, v0);
-      __ addu(t8, a3, t0);
+
+      __ srl(t8, key, 1);
+      __ addu(t8, a3, t8);
       __ sb(t1, MemOperand(t8, 0));
       }
       break;
     case EXTERNAL_BYTE_ELEMENTS:
     case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-      __ addu(t8, a3, t0);
+      __ srl(t8, key, 1);
+      __ addu(t8, a3, t8);
       __ sb(t1, MemOperand(t8, 0));
       break;
     case EXTERNAL_SHORT_ELEMENTS:
     case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-      __ sll(t8, t0, 1);
-      __ addu(t8, a3, t8);
+      __ addu(t8, a3, key);
       __ sh(t1, MemOperand(t8, 0));
       break;
     case EXTERNAL_INT_ELEMENTS:
     case EXTERNAL_UNSIGNED_INT_ELEMENTS:
-      __ sll(t8, t0, 2);
+      __ sll(t8, key, 1);
       __ addu(t8, a3, t8);
       __ sw(t1, MemOperand(t8, 0));
       break;
     case EXTERNAL_FLOAT_ELEMENTS:
       // Perform int-to-float conversion and store to memory.
+      __ SmiUntag(t0, key);
       StoreIntAsFloat(masm, a3, t0, t1, t2, t3, t4);
       break;
     case EXTERNAL_DOUBLE_ELEMENTS:
-      __ sll(t8, t0, 3);
+      __ sll(t8, key, 2);
       __ addu(a3, a3, t8);
       // a3: effective address of the double element
       FloatingPointHelper::Destination destination;
@@ -3921,12 +3926,11 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
   }
 
   // Entry registers are intact, a0 holds the value which is the return value.
-  __ mov(v0, value);
+  __ mov(v0, a0);
   __ Ret();
 
   if (elements_kind != EXTERNAL_PIXEL_ELEMENTS) {
     // a3: external array.
-    // t0: index (integer).
     __ bind(&check_heap_number);
     __ GetObjectType(value, t1, t2);
     __ Branch(&slow, ne, t2, Operand(HEAP_NUMBER_TYPE));
@@ -3934,7 +3938,6 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
     __ lw(a3, FieldMemOperand(a3, ExternalArray::kExternalPointerOffset));
 
     // a3: base pointer of external storage.
-    // t0: key (integer).
 
     // The WebGL specification leaves the behavior of storing NaN and
     // +/-Infinity into integer arrays basically undefined. For more
@@ -3947,11 +3950,11 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
 
       if (elements_kind == EXTERNAL_FLOAT_ELEMENTS) {
         __ cvt_s_d(f0, f0);
-        __ sll(t8, t0, 2);
+        __ sll(t8, key, 1);
         __ addu(t8, a3, t8);
         __ swc1(f0, MemOperand(t8, 0));
       } else if (elements_kind == EXTERNAL_DOUBLE_ELEMENTS) {
-        __ sll(t8, t0, 3);
+        __ sll(t8, key, 2);
         __ addu(t8, a3, t8);
         __ sdc1(f0, MemOperand(t8, 0));
       } else {
@@ -3960,18 +3963,18 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         switch (elements_kind) {
           case EXTERNAL_BYTE_ELEMENTS:
           case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-            __ addu(t8, a3, t0);
+            __ srl(t8, key, 1);
+            __ addu(t8, a3, t8);
             __ sb(t3, MemOperand(t8, 0));
             break;
           case EXTERNAL_SHORT_ELEMENTS:
           case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-            __ sll(t8, t0, 1);
-            __ addu(t8, a3, t8);
+            __ addu(t8, a3, key);
             __ sh(t3, MemOperand(t8, 0));
             break;
           case EXTERNAL_INT_ELEMENTS:
           case EXTERNAL_UNSIGNED_INT_ELEMENTS:
-            __ sll(t8, t0, 2);
+            __ sll(t8, key, 1);
             __ addu(t8, a3, t8);
             __ sw(t3, MemOperand(t8, 0));
             break;
@@ -3989,7 +3992,7 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
 
       // Entry registers are intact, a0 holds the value
       // which is the return value.
-      __ mov(v0, value);
+      __ mov(v0, a0);
       __ Ret();
     } else {
       // FPU is not available, do manual conversions.
@@ -4044,13 +4047,13 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         __ or_(t3, t7, t6);
 
         __ bind(&done);
-        __ sll(t9, a1, 2);
+        __ sll(t9, key, 1);
         __ addu(t9, a2, t9);
         __ sw(t3, MemOperand(t9, 0));
 
         // Entry registers are intact, a0 holds the value which is the return
         // value.
-        __ mov(v0, value);
+        __ mov(v0, a0);
         __ Ret();
 
         __ bind(&nan_or_infinity_or_zero);
@@ -4068,6 +4071,7 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         // t8: effective address of destination element.
         __ sw(t4, MemOperand(t8, 0));
         __ sw(t3, MemOperand(t8, Register::kSizeInBytes));
+        __ mov(v0, a0);
         __ Ret();
       } else {
         bool is_signed_type = IsElementTypeSigned(elements_kind);
@@ -4130,18 +4134,18 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         switch (elements_kind) {
           case EXTERNAL_BYTE_ELEMENTS:
           case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-            __ addu(t8, a3, t0);
+            __ srl(t8, key, 1);
+            __ addu(t8, a3, t8);
             __ sb(t3, MemOperand(t8, 0));
             break;
           case EXTERNAL_SHORT_ELEMENTS:
           case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-            __ sll(t8, t0, 1);
-            __ addu(t8, a3, t8);
+            __ addu(t8, a3, key);
             __ sh(t3, MemOperand(t8, 0));
             break;
           case EXTERNAL_INT_ELEMENTS:
           case EXTERNAL_UNSIGNED_INT_ELEMENTS:
-            __ sll(t8, t0, 2);
+            __ sll(t8, key, 1);
             __ addu(t8, a3, t8);
             __ sw(t3, MemOperand(t8, 0));
             break;
