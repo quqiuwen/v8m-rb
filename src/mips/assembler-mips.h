@@ -960,6 +960,9 @@ class Assembler : public AssemblerBase {
   // Say if we need to relocate with this mode.
   bool MustUseReg(RelocInfo::Mode rmode);
 
+  // Check jump target for J and JAL instructions
+  bool IsJumpTargetInRange(uint32_t target);
+
   // Record reloc info for current pc_.
   void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 

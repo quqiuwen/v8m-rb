@@ -466,16 +466,17 @@ enum StateTag {
 // (We assign CPUID itself to one of the currently reserved bits --
 // feel free to change this if needed.)
 // On X86/X64, values below 32 are bits in EDX, values above 32 are bits in ECX.
-enum CpuFeature { SSE4_1 = 32 + 19,  // x86
-                  SSE3 = 32 + 0,     // x86
-                  SSE2 = 26,   // x86
-                  CMOV = 15,   // x86
-                  RDTSC = 4,   // x86
-                  CPUID = 10,  // x86
-                  VFP3 = 1,    // ARM
-                  ARMv7 = 2,   // ARM
-                  SAHF = 0,    // x86
-                  FPU = 1};    // MIPS
+enum CpuFeature { SSE4_1 = 32 + 19,   // x86
+                  SSE3 = 32 + 0,      // x86
+                  SSE2 = 26,          // x86
+                  CMOV = 15,          // x86
+                  RDTSC = 4,          // x86
+                  CPUID = 10,         // x86
+                  VFP3 = 1,           // ARM
+                  ARMv7 = 2,          // ARM
+                  SAHF = 0,           // x86
+                  FPU = 1,            // MIPS
+                  BUG_24K_E156 = 2};  // MIPS 24K Erratum 156
 
 // The Strict Mode (ECMA-262 5th edition, 4.2.2).
 enum StrictModeFlag {

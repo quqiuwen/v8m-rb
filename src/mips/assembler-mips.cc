@@ -64,6 +64,8 @@ void CpuFeatures::Probe() {
 #else
   if (Serializer::enabled()) {
     supported_ |= OS::CpuFeaturesImpliedByPlatform();
+    // To avoid taking any chances the E156 bug is enabled.
+    supported_ |= 1u << BUG_24K_E156;
     return;  // No features if we might serialize.
   }
 
@@ -72,6 +74,11 @@ void CpuFeatures::Probe() {
     // runtime detection of FPU returns true.
     supported_ |= 1u << FPU;
     found_by_runtime_probing_ |= 1u << FPU;
+  }
+
+  if (OS::MipsCpuHasFeature(BUG_24K_E156)) {
+    supported_ |= 1u << BUG_24K_E156;
+    found_by_runtime_probing_ |= 1u << BUG_24K_E156;
   }
 #endif
 }
@@ -801,6 +808,32 @@ bool Assembler::MustUseReg(RelocInfo::Mode rmode) {
   return rmode != RelocInfo::NONE;
 }
 
+// Check jump target for J and JAL instructions.
+// Jump target must be in the current 256 MB-aligned region.
+// Also includes a workaround for the Erratum 156 bug of specific MIPS 24K
+// processors, which affects J and JAL instructions.
+bool Assembler::IsJumpTargetInRange(uint32_t target) {
+  // Get pc of the delay slot
+  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
+  bool in_range = ((uint32_t)(ipc^target) >> (kImm28Bits)) == 0;
+
+  if (in_range) {
+    if (CpuFeatures::IsSupported(BUG_24K_E156)) {
+      uint32_t segment_mask = (1 << 29) - 1;
+      uint32_t ipc_segment_addr = ipc & segment_mask;
+      // The E156 bug has some very specific requirements, we only check the
+      // most simple one: if the address of the delay slot instruction is in
+      // the first or last 32 KB of the 256 MB segment.
+      if (ipc_segment_addr < 32 * KB) {
+        return false;
+      } else if (ipc_segment_addr >= segment_mask - 32 * KB) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
 
 void Assembler::GenInstrRegister(Opcode opcode,
                                  Register rs,
@@ -1078,7 +1111,9 @@ void Assembler::bne(Register rs, Register rt, int16_t offset) {
 
 
 void Assembler::j(int32_t target) {
-  ASSERT(is_uint28(target) && ((target & 3) == 0));
+#if DEBUG
+  ASSERT(IsJumpTargetInRange(target) && ((target & 3) == 0));
+#endif
   GenInstrJump(J, target >> 2);
 }
 
@@ -1094,8 +1129,10 @@ void Assembler::jr(Register rs) {
 
 
 void Assembler::jal(int32_t target) {
+#ifdef DEBUG
+  ASSERT(IsJumpTargetInRange(target) && ((target & 3) == 0));
+#endif
   positions_recorder()->WriteRecordedPositions();
-  ASSERT(is_uint28(target) && ((target & 3) == 0));
   GenInstrJump(JAL, target >> 2);
 }
 

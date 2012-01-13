@@ -1914,7 +1914,7 @@ void MacroAssembler::Jump(const Operand& target, BranchDelaySlot bdslot) {
   if (target.is_reg()) {
       jr(target.rm());
   } else {
-    if (!MustUseReg(target.rmode_)) {
+    if (!MustUseReg(target.rmode_) && IsJumpTargetInRange(target.imm32_)) {
         j(target.imm32_);
     } else {
       li(t9, target);
@@ -1940,7 +1940,7 @@ void MacroAssembler::Jump(const Operand& target,
       jr(target.rm());
     }
   } else {  // Not register target.
-    if (!MustUseReg(target.rmode_)) {
+    if (!MustUseReg(target.rmode_) && IsJumpTargetInRange(target.imm32_)) {
       if (cond == cc_always) {
         j(target.imm32_);
       } else {
@@ -2309,18 +2309,13 @@ int MacroAssembler::CallSize(Address target,
 void MacroAssembler::Call(const Operand& target, BranchDelaySlot bdslot) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (target.is_reg()) {
-      jalr(target.rm());
+    jalr(target.rm());
   } else {    // !target.is_reg()
-    // TODO (kalmard) check this - jal should be avoided, right?
-    if (false && !MustUseReg(target.rmode_) && is_uint28(target.imm32_)) {
-      jal(target.imm32_);
-    } else {  // MustUseReg(target)
-      // Must record previous source positions before the
-      // li() generates a new code target.
-      positions_recorder()->WriteRecordedPositions();
-      li(t9, target);
-      jalr(t9);
-    }
+    // Must record previous source positions before the
+    // li() generates a new code target.
+    positions_recorder()->WriteRecordedPositions();
+    li(t9, target);
+    jalr(t9);
   }
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
@@ -2342,7 +2337,7 @@ void MacroAssembler::Call(const Operand& target,
       jalr(target.rm());
     }
   } else {    // !target.is_reg()
-    if (!MustUseReg(target.rmode_)) {
+    if (!MustUseReg(target.rmode_) && IsJumpTargetInRange(target.imm32_)) {
       if (cond == cc_always) {
         jal(target.imm32_);
       } else {
