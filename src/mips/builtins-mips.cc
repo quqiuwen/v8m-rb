@@ -633,7 +633,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   __ lw(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kConstructStubOffset));
   __ Addu(t9, a2, Operand(Code::kHeaderSize - kHeapObjectTag));
-  __ Jump(Operand(t9));
+  __ Jump(t9);
 
   // a0: number of arguments
   // a1: called object

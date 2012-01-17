@@ -119,40 +119,7 @@ class MacroAssembler: public Assembler {
 #define COND_TYPED_ARGS Condition cond, Register r1, const Operand& r2
 #define COND_ARGS cond, r1, r2
 
-// ** Prototypes
-
-// * Prototypes for functions with no target (eg Ret()).
-#define DECLARE_NOTARGET_PROTOTYPE(Name) \
-  void Name(BranchDelaySlot bd = PROTECT); \
-  void Name(COND_TYPED_ARGS, BranchDelaySlot bd = PROTECT); \
-  inline void Name(BranchDelaySlot bd, COND_TYPED_ARGS) { \
-    Name(COND_ARGS, bd); \
-  }
-
-// * Prototypes for functions with a target.
-
-// Cases when relocation may be needed.
-#define DECLARE_RELOC_PROTOTYPE(Name, target_type) \
-  void Name(target_type target, \
-            RelocInfo::Mode rmode, \
-            BranchDelaySlot bd = PROTECT); \
-  inline void Name(BranchDelaySlot bd, \
-                   target_type target, \
-                   RelocInfo::Mode rmode) { \
-    Name(target, rmode, bd); \
-  } \
-  void Name(target_type target, \
-            RelocInfo::Mode rmode, \
-            COND_TYPED_ARGS, \
-            BranchDelaySlot bd = PROTECT); \
-  inline void Name(BranchDelaySlot bd, \
-                   target_type target, \
-                   RelocInfo::Mode rmode, \
-                   COND_TYPED_ARGS) { \
-    Name(target, rmode, COND_ARGS, bd); \
-  }
-
-// Cases when relocation is not needed.
+  // Cases when relocation is not needed.
 #define DECLARE_NORELOC_PROTOTYPE(Name, target_type) \
   void Name(target_type target, BranchDelaySlot bd = PROTECT); \
   inline void Name(BranchDelaySlot bd, target_type target) { \
@@ -167,34 +134,43 @@ class MacroAssembler: public Assembler {
     Name(target, COND_ARGS, bd); \
   }
 
-// ** Target prototypes.
-
-#define DECLARE_JUMP_CALL_PROTOTYPES(Name) \
-  DECLARE_NORELOC_PROTOTYPE(Name, Register) \
-  DECLARE_NORELOC_PROTOTYPE(Name, const Operand&) \
-  DECLARE_RELOC_PROTOTYPE(Name, byte*) \
-  DECLARE_RELOC_PROTOTYPE(Name, Handle<Code>)
-
 #define DECLARE_BRANCH_PROTOTYPES(Name) \
   DECLARE_NORELOC_PROTOTYPE(Name, Label*) \
   DECLARE_NORELOC_PROTOTYPE(Name, int16_t)
 
+  DECLARE_BRANCH_PROTOTYPES(Branch)
+  DECLARE_BRANCH_PROTOTYPES(BranchAndLink)
 
-DECLARE_JUMP_CALL_PROTOTYPES(Jump)
-DECLARE_JUMP_CALL_PROTOTYPES(Call)
-
-DECLARE_BRANCH_PROTOTYPES(Branch)
-DECLARE_BRANCH_PROTOTYPES(BranchAndLink)
-
-DECLARE_NOTARGET_PROTOTYPE(Ret)
-
+#undef DECLARE_BRANCH_PROTOTYPES
 #undef COND_TYPED_ARGS
 #undef COND_ARGS
-#undef DECLARE_NOTARGET_PROTOTYPE
-#undef DECLARE_NORELOC_PROTOTYPE
-#undef DECLARE_RELOC_PROTOTYPE
-#undef DECLARE_JUMP_CALL_PROTOTYPES
-#undef DECLARE_BRANCH_PROTOTYPES
+
+
+  // Jump, Call, and Ret pseudo instructions implementing inter-working.
+#define COND_ARGS Condition cond = al, Register rs = zero_reg, \
+  const Operand& rt = Operand(zero_reg), BranchDelaySlot bd = PROTECT
+
+  void Jump(Register target, COND_ARGS);
+  void Jump(intptr_t target, RelocInfo::Mode rmode, COND_ARGS);
+  void Jump(Address target, RelocInfo::Mode rmode, COND_ARGS);
+  void Jump(Handle<Code> code, RelocInfo::Mode rmode, COND_ARGS);
+  static int CallSize(Register target, COND_ARGS);
+  void Call(Register target, COND_ARGS);
+  static int CallSize(Address target, RelocInfo::Mode rmode, COND_ARGS);
+  void Call(Address target, RelocInfo::Mode rmode, COND_ARGS);
+  static int CallSize(Handle<Code> code,
+                      RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
+                      COND_ARGS);
+  void Call(Handle<Code> code,
+            RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
+            COND_ARGS);
+  void Ret(COND_ARGS);
+  inline void Ret(BranchDelaySlot bd, Condition cond = al,
+    Register rs = zero_reg, const Operand& rt = Operand(zero_reg)) {
+    Ret(cond, rs, rt, bd);
+  }
+
+#undef COND_ARGS
 
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
@@ -1132,9 +1108,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                                            Register scratch2,
                                            Label* failure);
 
-  static int CallSize(Register target);
-  static int CallSize(byte* target, RelocInfo::Mode rmode);
-
   // ---------------------------------------------------------------------------
   // Patching helpers.
 
@@ -1172,9 +1145,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void Jalr(Label* L, BranchDelaySlot bdslot);
 
   void Jump(intptr_t target, RelocInfo::Mode rmode,
-            BranchDelaySlot bd = PROTECT);
-  void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
             BranchDelaySlot bd = PROTECT);
   void Call(intptr_t target, RelocInfo::Mode rmode,
             BranchDelaySlot bd = PROTECT);

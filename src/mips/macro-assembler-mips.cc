@@ -50,84 +50,1054 @@ MacroAssembler::MacroAssembler(Isolate* arg_isolate, void* buffer, int size)
 }
 
 
-// Arguments macros
-#define COND_TYPED_ARGS Condition cond, Register r1, const Operand& r2
-#define COND_ARGS cond, r1, r2
+// Emulated condtional branches do not emit a nop in the branch delay slot.
+//
+// BRANCH_ARGS_CHECK checks that conditional jump arguments are correct.
+#define BRANCH_ARGS_CHECK(cond, rs, rt) ASSERT(                                \
+    (cond == cc_always && rs.is(zero_reg) && rt.rm().is(zero_reg)) ||          \
+    (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg))))
 
-#define REGISTER_TARGET_BODY(Name) \
-void MacroAssembler::Name(Register target, \
-                          BranchDelaySlot bd) { \
-  Name(Operand(target), bd); \
-} \
-void MacroAssembler::Name(Register target, COND_TYPED_ARGS, \
-                          BranchDelaySlot bd) { \
-  Name(Operand(target), COND_ARGS, bd); \
+
+void MacroAssembler::Branch(int16_t offset, BranchDelaySlot bdslot) {
+  BranchShort(offset, bdslot);
 }
 
 
-#define INT_PTR_TARGET_BODY(Name) \
-void MacroAssembler::Name(intptr_t target, RelocInfo::Mode rmode, \
-                          BranchDelaySlot bd) { \
-  Name(Operand(target, rmode), bd); \
-} \
-void MacroAssembler::Name(intptr_t target, \
-                          RelocInfo::Mode rmode, \
-                          COND_TYPED_ARGS, \
-                          BranchDelaySlot bd) { \
-  Name(Operand(target, rmode), COND_ARGS, bd); \
+void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
+                            const Operand& rt,
+                            BranchDelaySlot bdslot) {
+  BranchShort(offset, cond, rs, rt, bdslot);
 }
 
 
-#define BYTE_PTR_TARGET_BODY(Name) \
-void MacroAssembler::Name(byte* target, RelocInfo::Mode rmode, \
-                          BranchDelaySlot bd) { \
-  Name(reinterpret_cast<intptr_t>(target), rmode, bd); \
-} \
-void MacroAssembler::Name(byte* target, \
-                          RelocInfo::Mode rmode, \
-                          COND_TYPED_ARGS, \
-                          BranchDelaySlot bd) { \
-  Name(reinterpret_cast<intptr_t>(target), rmode, COND_ARGS, bd); \
+void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
+  if (L->is_bound()) {
+    if (is_near(L)) {
+      BranchShort(L, bdslot);
+    } else {
+      Jr(L, bdslot);
+    }
+  } else {
+    if (is_trampoline_emitted()) {
+      Jr(L, bdslot);
+    } else {
+      BranchShort(L, bdslot);
+    }
+  }
 }
 
 
-#define CODE_TARGET_BODY(Name) \
-void MacroAssembler::Name(Handle<Code> target, RelocInfo::Mode rmode, \
-                          BranchDelaySlot bd) { \
-  Name(reinterpret_cast<intptr_t>(target.location()), rmode, bd); \
-} \
-void MacroAssembler::Name(Handle<Code> target, \
-                          RelocInfo::Mode rmode, \
-                          COND_TYPED_ARGS, \
-                          BranchDelaySlot bd) { \
-  Name(reinterpret_cast<intptr_t>(target.location()), rmode, COND_ARGS, bd); \
+void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
+                            const Operand& rt,
+                            BranchDelaySlot bdslot) {
+  if (L->is_bound()) {
+    if (is_near(L)) {
+      BranchShort(L, cond, rs, rt, bdslot);
+    } else {
+      Label skip;
+      Condition neg_cond = NegateCondition(cond);
+      BranchShort(&skip, neg_cond, rs, rt);
+      Jr(L, bdslot);
+      bind(&skip);
+    }
+  } else {
+    if (is_trampoline_emitted()) {
+      Label skip;
+      Condition neg_cond = NegateCondition(cond);
+      BranchShort(&skip, neg_cond, rs, rt);
+      Jr(L, bdslot);
+      bind(&skip);
+    } else {
+      BranchShort(L, cond, rs, rt, bdslot);
+    }
+  }
 }
 
 
-REGISTER_TARGET_BODY(Jump)
-REGISTER_TARGET_BODY(Call)
-INT_PTR_TARGET_BODY(Jump)
-INT_PTR_TARGET_BODY(Call)
-BYTE_PTR_TARGET_BODY(Jump)
-BYTE_PTR_TARGET_BODY(Call)
-CODE_TARGET_BODY(Jump)
-CODE_TARGET_BODY(Call)
+void MacroAssembler::BranchShort(int16_t offset, BranchDelaySlot bdslot) {
+  b(offset);
 
-#undef COND_TYPED_ARGS
-#undef COND_ARGS
-#undef REGISTER_TARGET_BODY
-#undef BYTE_PTR_TARGET_BODY
-#undef CODE_TARGET_BODY
-
-
-void MacroAssembler::Ret(BranchDelaySlot bd) {
-  Jump(Operand(ra), bd);
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
 }
 
 
-void MacroAssembler::Ret(Condition cond, Register r1, const Operand& r2,
-    BranchDelaySlot bd) {
-  Jump(Operand(ra), cond, r1, r2, bd);
+void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
+                                 const Operand& rt,
+                                 BranchDelaySlot bdslot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
+  ASSERT(!rs.is(zero_reg));
+  Register r2 = no_reg;
+  Register scratch = at;
+
+  if (rt.is_reg()) {
+    // NOTE: 'at' can be clobbered by Branch but it is legal to use it as rs or
+    // rt.
+    r2 = rt.rm_;
+    switch (cond) {
+      case cc_always:
+        b(offset);
+        break;
+      case eq:
+        beq(rs, r2, offset);
+        break;
+      case ne:
+        bne(rs, r2, offset);
+        break;
+      // Signed comparison.
+      case greater:
+        if (r2.is(zero_reg)) {
+          bgtz(rs, offset);
+        } else {
+          slt(scratch, r2, rs);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case greater_equal:
+        if (r2.is(zero_reg)) {
+          bgez(rs, offset);
+        } else {
+          slt(scratch, rs, r2);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      case less:
+        if (r2.is(zero_reg)) {
+          bltz(rs, offset);
+        } else {
+          slt(scratch, rs, r2);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case less_equal:
+        if (r2.is(zero_reg)) {
+          blez(rs, offset);
+        } else {
+          slt(scratch, r2, rs);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      // Unsigned comparison.
+      case Ugreater:
+        if (r2.is(zero_reg)) {
+          bgtz(rs, offset);
+        } else {
+          sltu(scratch, r2, rs);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case Ugreater_equal:
+        if (r2.is(zero_reg)) {
+          bgez(rs, offset);
+        } else {
+          sltu(scratch, rs, r2);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      case Uless:
+        if (r2.is(zero_reg)) {
+          // No code needs to be emitted.
+          return;
+        } else {
+          sltu(scratch, rs, r2);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case Uless_equal:
+        if (r2.is(zero_reg)) {
+          b(offset);
+        } else {
+          sltu(scratch, r2, rs);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      default:
+        UNREACHABLE();
+    }
+  } else {
+    // Be careful to always use shifted_branch_offset only just before the
+    // branch instruction, as the location will be remember for patching the
+    // target.
+    switch (cond) {
+      case cc_always:
+        b(offset);
+        break;
+      case eq:
+        // We don't want any other register but scratch clobbered.
+        ASSERT(!scratch.is(rs));
+        r2 = scratch;
+        li(r2, rt);
+        beq(rs, r2, offset);
+        break;
+      case ne:
+        // We don't want any other register but scratch clobbered.
+        ASSERT(!scratch.is(rs));
+        r2 = scratch;
+        li(r2, rt);
+        bne(rs, r2, offset);
+        break;
+      // Signed comparison.
+      case greater:
+        if (rt.imm32_ == 0) {
+          bgtz(rs, offset);
+        } else {
+          r2 = scratch;
+          li(r2, rt);
+          slt(scratch, r2, rs);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case greater_equal:
+        if (rt.imm32_ == 0) {
+          bgez(rs, offset);
+        } else if (is_int16(rt.imm32_)) {
+          slti(scratch, rs, rt.imm32_);
+          beq(scratch, zero_reg, offset);
+        } else {
+          r2 = scratch;
+          li(r2, rt);
+          slt(scratch, rs, r2);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      case less:
+        if (rt.imm32_ == 0) {
+          bltz(rs, offset);
+        } else if (is_int16(rt.imm32_)) {
+          slti(scratch, rs, rt.imm32_);
+          bne(scratch, zero_reg, offset);
+        } else {
+          r2 = scratch;
+          li(r2, rt);
+          slt(scratch, rs, r2);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case less_equal:
+        if (rt.imm32_ == 0) {
+          blez(rs, offset);
+        } else {
+          r2 = scratch;
+          li(r2, rt);
+          slt(scratch, r2, rs);
+          beq(scratch, zero_reg, offset);
+       }
+       break;
+      // Unsigned comparison.
+      case Ugreater:
+        if (rt.imm32_ == 0) {
+          bgtz(rs, offset);
+        } else {
+          r2 = scratch;
+          li(r2, rt);
+          sltu(scratch, r2, rs);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case Ugreater_equal:
+        if (rt.imm32_ == 0) {
+          bgez(rs, offset);
+        } else if (is_int16(rt.imm32_)) {
+          sltiu(scratch, rs, rt.imm32_);
+          beq(scratch, zero_reg, offset);
+        } else {
+          r2 = scratch;
+          li(r2, rt);
+          sltu(scratch, rs, r2);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      case Uless:
+        if (rt.imm32_ == 0) {
+          // No code needs to be emitted.
+          return;
+        } else if (is_int16(rt.imm32_)) {
+          sltiu(scratch, rs, rt.imm32_);
+          bne(scratch, zero_reg, offset);
+        } else {
+          r2 = scratch;
+          li(r2, rt);
+          sltu(scratch, rs, r2);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case Uless_equal:
+        if (rt.imm32_ == 0) {
+          b(offset);
+        } else {
+          r2 = scratch;
+          li(r2, rt);
+          sltu(scratch, r2, rs);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      default:
+        UNREACHABLE();
+    }
+  }
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::BranchShort(Label* L, BranchDelaySlot bdslot) {
+  // We use branch_offset as an argument for the branch instructions to be sure
+  // it is called just before generating the branch instruction, as needed.
+
+  b(shifted_branch_offset(L, false));
+
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
+                                 const Operand& rt,
+                                 BranchDelaySlot bdslot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
+
+  int32_t offset;
+  Register r2 = no_reg;
+  Register scratch = at;
+  if (rt.is_reg()) {
+    r2 = rt.rm_;
+    // Be careful to always use shifted_branch_offset only just before the
+    // branch instruction, as the location will be remember for patching the
+    // target.
+    switch (cond) {
+      case cc_always:
+        offset = shifted_branch_offset(L, false);
+        b(offset);
+        break;
+      case eq:
+        offset = shifted_branch_offset(L, false);
+        beq(rs, r2, offset);
+        break;
+      case ne:
+        offset = shifted_branch_offset(L, false);
+        bne(rs, r2, offset);
+        break;
+      // Signed comparison.
+      case greater:
+        if (r2.is(zero_reg)) {
+          offset = shifted_branch_offset(L, false);
+          bgtz(rs, offset);
+        } else {
+          slt(scratch, r2, rs);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case greater_equal:
+        if (r2.is(zero_reg)) {
+          offset = shifted_branch_offset(L, false);
+          bgez(rs, offset);
+        } else {
+          slt(scratch, rs, r2);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      case less:
+        if (r2.is(zero_reg)) {
+          offset = shifted_branch_offset(L, false);
+          bltz(rs, offset);
+        } else {
+          slt(scratch, rs, r2);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case less_equal:
+        if (r2.is(zero_reg)) {
+          offset = shifted_branch_offset(L, false);
+          blez(rs, offset);
+        } else {
+          slt(scratch, r2, rs);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      // Unsigned comparison.
+      case Ugreater:
+        if (r2.is(zero_reg)) {
+          offset = shifted_branch_offset(L, false);
+           bgtz(rs, offset);
+        } else {
+          sltu(scratch, r2, rs);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case Ugreater_equal:
+        if (r2.is(zero_reg)) {
+          offset = shifted_branch_offset(L, false);
+          bgez(rs, offset);
+        } else {
+          sltu(scratch, rs, r2);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      case Uless:
+        if (r2.is(zero_reg)) {
+          // No code needs to be emitted.
+          return;
+        } else {
+          sltu(scratch, rs, r2);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case Uless_equal:
+        if (r2.is(zero_reg)) {
+          offset = shifted_branch_offset(L, false);
+          b(offset);
+        } else {
+          sltu(scratch, r2, rs);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      default:
+        UNREACHABLE();
+    }
+  } else {
+    // Be careful to always use shifted_branch_offset only just before the
+    // branch instruction, as the location will be remember for patching the
+    // target.
+    switch (cond) {
+      case cc_always:
+        offset = shifted_branch_offset(L, false);
+        b(offset);
+        break;
+      case eq:
+        ASSERT(!scratch.is(rs));
+        r2 = scratch;
+        li(r2, rt);
+        offset = shifted_branch_offset(L, false);
+        beq(rs, r2, offset);
+        break;
+      case ne:
+        ASSERT(!scratch.is(rs));
+        r2 = scratch;
+        li(r2, rt);
+        offset = shifted_branch_offset(L, false);
+        bne(rs, r2, offset);
+        break;
+      // Signed comparison.
+      case greater:
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          bgtz(rs, offset);
+        } else {
+          ASSERT(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          slt(scratch, r2, rs);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case greater_equal:
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          bgez(rs, offset);
+        } else if (is_int16(rt.imm32_)) {
+          slti(scratch, rs, rt.imm32_);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        } else {
+          ASSERT(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          slt(scratch, rs, r2);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      case less:
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          bltz(rs, offset);
+        } else if (is_int16(rt.imm32_)) {
+          slti(scratch, rs, rt.imm32_);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        } else {
+          ASSERT(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          slt(scratch, rs, r2);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case less_equal:
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          blez(rs, offset);
+        } else {
+          ASSERT(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          slt(scratch, r2, rs);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      // Unsigned comparison.
+      case Ugreater:
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          bgtz(rs, offset);
+        } else {
+          ASSERT(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          sltu(scratch, r2, rs);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case Ugreater_equal:
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          bgez(rs, offset);
+        } else if (is_int16(rt.imm32_)) {
+          sltiu(scratch, rs, rt.imm32_);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        } else {
+          ASSERT(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          sltu(scratch, rs, r2);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+     case Uless:
+        if (rt.imm32_ == 0) {
+          // No code needs to be emitted.
+          return;
+        } else if (is_int16(rt.imm32_)) {
+          sltiu(scratch, rs, rt.imm32_);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        } else {
+          ASSERT(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          sltu(scratch, rs, r2);
+          offset = shifted_branch_offset(L, false);
+          bne(scratch, zero_reg, offset);
+        }
+        break;
+      case Uless_equal:
+        if (rt.imm32_ == 0) {
+          offset = shifted_branch_offset(L, false);
+          b(offset);
+        } else {
+          ASSERT(!scratch.is(rs));
+          r2 = scratch;
+          li(r2, rt);
+          sltu(scratch, r2, rs);
+          offset = shifted_branch_offset(L, false);
+          beq(scratch, zero_reg, offset);
+        }
+        break;
+      default:
+        UNREACHABLE();
+    }
+  }
+  // Check that offset could actually hold on an int16_t.
+  ASSERT(is_int16(offset));
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::BranchAndLink(int16_t offset, BranchDelaySlot bdslot) {
+  BranchAndLinkShort(offset, bdslot);
+}
+
+
+void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
+                                   const Operand& rt,
+                                   BranchDelaySlot bdslot) {
+  BranchAndLinkShort(offset, cond, rs, rt, bdslot);
+}
+
+
+void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
+  if (L->is_bound()) {
+    if (is_near(L)) {
+      BranchAndLinkShort(L, bdslot);
+    } else {
+      Jalr(L, bdslot);
+    }
+  } else {
+    if (is_trampoline_emitted()) {
+      Jalr(L, bdslot);
+    } else {
+      BranchAndLinkShort(L, bdslot);
+    }
+  }
+}
+
+
+void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
+                                   const Operand& rt,
+                                   BranchDelaySlot bdslot) {
+  if (L->is_bound()) {
+    if (is_near(L)) {
+      BranchAndLinkShort(L, cond, rs, rt, bdslot);
+    } else {
+      Label skip;
+      Condition neg_cond = NegateCondition(cond);
+      BranchShort(&skip, neg_cond, rs, rt);
+      Jalr(L, bdslot);
+      bind(&skip);
+    }
+  } else {
+    if (is_trampoline_emitted()) {
+      Label skip;
+      Condition neg_cond = NegateCondition(cond);
+      BranchShort(&skip, neg_cond, rs, rt);
+      Jalr(L, bdslot);
+      bind(&skip);
+    } else {
+      BranchAndLinkShort(L, cond, rs, rt, bdslot);
+    }
+  }
+}
+
+
+// We need to use a bgezal or bltzal, but they can't be used directly with the
+// slt instructions. We could use sub or add instead but we would miss overflow
+// cases, so we keep slt and add an intermediate third instruction.
+void MacroAssembler::BranchAndLinkShort(int16_t offset,
+                                        BranchDelaySlot bdslot) {
+  bal(offset);
+
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
+                                        Register rs, const Operand& rt,
+                                        BranchDelaySlot bdslot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
+  Register r2 = no_reg;
+  Register scratch = at;
+
+  if (rt.is_reg()) {
+    r2 = rt.rm_;
+  } else if (cond != cc_always) {
+    r2 = scratch;
+    li(r2, rt);
+  }
+
+  switch (cond) {
+    case cc_always:
+      bal(offset);
+      break;
+    case eq:
+      bne(rs, r2, 2);
+      nop();
+      bal(offset);
+      break;
+    case ne:
+      beq(rs, r2, 2);
+      nop();
+      bal(offset);
+      break;
+
+    // Signed comparison.
+    case greater:
+      slt(scratch, r2, rs);
+      addiu(scratch, scratch, -1);
+      bgezal(scratch, offset);
+      break;
+    case greater_equal:
+      slt(scratch, rs, r2);
+      addiu(scratch, scratch, -1);
+      bltzal(scratch, offset);
+      break;
+    case less:
+      slt(scratch, rs, r2);
+      addiu(scratch, scratch, -1);
+      bgezal(scratch, offset);
+      break;
+    case less_equal:
+      slt(scratch, r2, rs);
+      addiu(scratch, scratch, -1);
+      bltzal(scratch, offset);
+      break;
+
+    // Unsigned comparison.
+    case Ugreater:
+      sltu(scratch, r2, rs);
+      addiu(scratch, scratch, -1);
+      bgezal(scratch, offset);
+      break;
+    case Ugreater_equal:
+      sltu(scratch, rs, r2);
+      addiu(scratch, scratch, -1);
+      bltzal(scratch, offset);
+      break;
+    case Uless:
+      sltu(scratch, rs, r2);
+      addiu(scratch, scratch, -1);
+      bgezal(scratch, offset);
+      break;
+    case Uless_equal:
+      sltu(scratch, r2, rs);
+      addiu(scratch, scratch, -1);
+      bltzal(scratch, offset);
+      break;
+
+    default:
+      UNREACHABLE();
+  }
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::BranchAndLinkShort(Label* L, BranchDelaySlot bdslot) {
+  bal(shifted_branch_offset(L, false));
+
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
+                                        const Operand& rt,
+                                        BranchDelaySlot bdslot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
+
+  int32_t offset;
+  Register r2 = no_reg;
+  Register scratch = at;
+  if (rt.is_reg()) {
+    r2 = rt.rm_;
+  } else if (cond != cc_always) {
+    r2 = scratch;
+    li(r2, rt);
+  }
+
+  switch (cond) {
+    case cc_always:
+      offset = shifted_branch_offset(L, false);
+      bal(offset);
+      break;
+    case eq:
+      bne(rs, r2, 2);
+      nop();
+      offset = shifted_branch_offset(L, false);
+      bal(offset);
+      break;
+    case ne:
+      beq(rs, r2, 2);
+      nop();
+      offset = shifted_branch_offset(L, false);
+      bal(offset);
+      break;
+
+    // Signed comparison.
+    case greater:
+      slt(scratch, r2, rs);
+      addiu(scratch, scratch, -1);
+      offset = shifted_branch_offset(L, false);
+      bgezal(scratch, offset);
+      break;
+    case greater_equal:
+      slt(scratch, rs, r2);
+      addiu(scratch, scratch, -1);
+      offset = shifted_branch_offset(L, false);
+      bltzal(scratch, offset);
+      break;
+    case less:
+      slt(scratch, rs, r2);
+      addiu(scratch, scratch, -1);
+      offset = shifted_branch_offset(L, false);
+      bgezal(scratch, offset);
+      break;
+    case less_equal:
+      slt(scratch, r2, rs);
+      addiu(scratch, scratch, -1);
+      offset = shifted_branch_offset(L, false);
+      bltzal(scratch, offset);
+      break;
+
+    // Unsigned comparison.
+    case Ugreater:
+      sltu(scratch, r2, rs);
+      addiu(scratch, scratch, -1);
+      offset = shifted_branch_offset(L, false);
+      bgezal(scratch, offset);
+      break;
+    case Ugreater_equal:
+      sltu(scratch, rs, r2);
+      addiu(scratch, scratch, -1);
+      offset = shifted_branch_offset(L, false);
+      bltzal(scratch, offset);
+      break;
+    case Uless:
+      sltu(scratch, rs, r2);
+      addiu(scratch, scratch, -1);
+      offset = shifted_branch_offset(L, false);
+      bgezal(scratch, offset);
+      break;
+    case Uless_equal:
+      sltu(scratch, r2, rs);
+      addiu(scratch, scratch, -1);
+      offset = shifted_branch_offset(L, false);
+      bltzal(scratch, offset);
+      break;
+
+    default:
+      UNREACHABLE();
+  }
+
+  // Check that offset could actually hold on an int16_t.
+  ASSERT(is_int16(offset));
+
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::Jump(Register target,
+                          Condition cond,
+                          Register rs,
+                          const Operand& rt,
+                          BranchDelaySlot bd) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+  if (cond == cc_always) {
+    jr(target);
+  } else {
+    BRANCH_ARGS_CHECK(cond, rs, rt);
+    Branch(2, NegateCondition(cond), rs, rt);
+    jr(target);
+  }
+  // Emit a nop in the branch delay slot if required.
+  if (bd == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::Jump(intptr_t target,
+                          RelocInfo::Mode rmode,
+                          Condition cond,
+                          Register rs,
+                          const Operand& rt,
+                          BranchDelaySlot bd) {
+  li(t9, Operand(target, rmode));
+  Jump(t9, cond, rs, rt, bd);
+}
+
+
+void MacroAssembler::Jump(Address target,
+                          RelocInfo::Mode rmode,
+                          Condition cond,
+                          Register rs,
+                          const Operand& rt,
+                          BranchDelaySlot bd) {
+  ASSERT(!RelocInfo::IsCodeTarget(rmode));
+  Jump(reinterpret_cast<intptr_t>(target), rmode, cond, rs, rt, bd);
+}
+
+
+void MacroAssembler::Jump(Handle<Code> code,
+                          RelocInfo::Mode rmode,
+                          Condition cond,
+                          Register rs,
+                          const Operand& rt,
+                          BranchDelaySlot bd) {
+  ASSERT(RelocInfo::IsCodeTarget(rmode));
+  Jump(reinterpret_cast<intptr_t>(code.location()), rmode, cond, rs, rt, bd);
+}
+
+
+int MacroAssembler::CallSize(Register target,
+                             Condition cond,
+                             Register rs,
+                             const Operand& rt,
+                             BranchDelaySlot bd) {
+  int size = 0;
+
+  if (cond == cc_always) {
+    size += 1;
+  } else {
+    size += 3;
+  }
+
+  if (bd == PROTECT)
+    size += 1;
+
+  return size * kInstrSize;
+}
+
+
+// Note: To call gcc-compiled C code on mips, you must call thru t9.
+void MacroAssembler::Call(Register target,
+                          Condition cond,
+                          Register rs,
+                          const Operand& rt,
+                          BranchDelaySlot bd) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+  Label start;
+  bind(&start);
+  if (cond == cc_always) {
+    jalr(target);
+  } else {
+    BRANCH_ARGS_CHECK(cond, rs, rt);
+    Branch(2, NegateCondition(cond), rs, rt);
+    jalr(target);
+  }
+  // Emit a nop in the branch delay slot if required.
+  if (bd == PROTECT)
+    nop();
+
+  ASSERT_EQ(CallSize(target, cond, rs, rt, bd),
+            SizeOfCodeGeneratedSince(&start));
+}
+
+
+int MacroAssembler::CallSize(Address target,
+                             RelocInfo::Mode rmode,
+                             Condition cond,
+                             Register rs,
+                             const Operand& rt,
+                             BranchDelaySlot bd) {
+  int size = CallSize(t9, cond, rs, rt, bd);
+  return size + 2 * kInstrSize;
+}
+
+
+void MacroAssembler::Call(Address target,
+                          RelocInfo::Mode rmode,
+                          Condition cond,
+                          Register rs,
+                          const Operand& rt,
+                          BranchDelaySlot bd) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+  Label start;
+  bind(&start);
+  int32_t target_int = reinterpret_cast<int32_t>(target);
+  // Must record previous source positions before the
+  // li() generates a new code target.
+  positions_recorder()->WriteRecordedPositions();
+  li(t9, Operand(target_int, rmode), true);
+  Call(t9, cond, rs, rt, bd);
+  ASSERT_EQ(CallSize(target, rmode, cond, rs, rt, bd),
+            SizeOfCodeGeneratedSince(&start));
+}
+
+
+int MacroAssembler::CallSize(Handle<Code> code,
+                             RelocInfo::Mode rmode,
+                             Condition cond,
+                             Register rs,
+                             const Operand& rt,
+                             BranchDelaySlot bd) {
+  return CallSize(reinterpret_cast<Address>(code.location()),
+      rmode, cond, rs, rt, bd);
+}
+
+
+void MacroAssembler::Call(Handle<Code> code,
+                          RelocInfo::Mode rmode,
+                          Condition cond,
+                          Register rs,
+                          const Operand& rt,
+                          BranchDelaySlot bd) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+  Label start;
+  bind(&start);
+  ASSERT(RelocInfo::IsCodeTarget(rmode));
+  Call(reinterpret_cast<Address>(code.location()), rmode, cond, rs, rt, bd);
+  ASSERT_EQ(CallSize(code, rmode, cond, rs, rt),
+            SizeOfCodeGeneratedSince(&start));
+}
+
+
+void MacroAssembler::Ret(Condition cond,
+                         Register rs,
+                         const Operand& rt,
+                         BranchDelaySlot bd) {
+  Jump(ra, cond, rs, rt, bd);
+}
+
+
+void MacroAssembler::J(Label* L, BranchDelaySlot bdslot) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+
+  uint32_t imm28;
+  imm28 = jump_address(L);
+  imm28 &= kImm28Mask;
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    j(imm28);
+  }
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+
+  uint32_t imm32;
+  imm32 = jump_address(L);
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    lui(at, (imm32 & kHiMask) >> kLuiShift);
+    ori(at, at, (imm32 & kImm16Mask));
+  }
+  jr(at);
+
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+
+  uint32_t imm32;
+  imm32 = jump_address(L);
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    lui(at, (imm32 & kHiMask) >> kLuiShift);
+    ori(at, at, (imm32 & kImm16Mask));
+  }
+  jalr(at);
+
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
 }
 
 
@@ -1058,911 +2028,6 @@ void MacroAssembler::GetLeastBitsFromInt32(Register dst,
 }
 
 
-// Emulated condtional branches do not emit a nop in the branch delay slot.
-//
-// BRANCH_ARGS_CHECK checks that conditional jump arguments are correct.
-#define BRANCH_ARGS_CHECK(cond, rs, rt) ASSERT(                                \
-    (cond == cc_always && rs.is(zero_reg) && rt.rm().is(zero_reg)) ||          \
-    (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg))))
-
-
-bool MacroAssembler::UseAbsoluteCodePointers() {
-  if (is_trampoline_emitted()) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
-
-void MacroAssembler::Branch(int16_t offset, BranchDelaySlot bdslot) {
-  BranchShort(offset, bdslot);
-}
-
-
-void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
-                            const Operand& rt,
-                            BranchDelaySlot bdslot) {
-  BranchShort(offset, cond, rs, rt, bdslot);
-}
-
-
-void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
-  bool is_label_near = is_near(L);
-  if (UseAbsoluteCodePointers() && !is_label_near) {
-    Jr(L, bdslot);
-  } else {
-    BranchShort(L, bdslot);
-  }
-}
-
-
-void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
-                            const Operand& rt,
-                            BranchDelaySlot bdslot) {
-  bool is_label_near = is_near(L);
-  if (UseAbsoluteCodePointers() && !is_label_near) {
-    Label skip;
-    Condition neg_cond = NegateCondition(cond);
-    BranchShort(&skip, neg_cond, rs, rt);
-    Jr(L, bdslot);
-    bind(&skip);
-  } else {
-    BranchShort(L, cond, rs, rt, bdslot);
-  }
-}
-
-
-void MacroAssembler::BranchShort(int16_t offset, BranchDelaySlot bdslot) {
-  b(offset);
-
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
-                                 const Operand& rt,
-                                 BranchDelaySlot bdslot) {
-  BRANCH_ARGS_CHECK(cond, rs, rt);
-  ASSERT(!rs.is(zero_reg));
-  Register r2 = no_reg;
-  Register scratch = at;
-
-  if (rt.is_reg()) {
-    // NOTE: 'at' can be clobbered by Branch but it is legal to use it as rs or
-    // rt.
-    r2 = rt.rm_;
-    switch (cond) {
-      case cc_always:
-        b(offset);
-        break;
-      case eq:
-        beq(rs, r2, offset);
-        break;
-      case ne:
-        bne(rs, r2, offset);
-        break;
-      // Signed comparison.
-      case greater:
-        if (r2.is(zero_reg)) {
-          bgtz(rs, offset);
-        } else {
-          slt(scratch, r2, rs);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case greater_equal:
-        if (r2.is(zero_reg)) {
-          bgez(rs, offset);
-        } else {
-          slt(scratch, rs, r2);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      case less:
-        if (r2.is(zero_reg)) {
-          bltz(rs, offset);
-        } else {
-          slt(scratch, rs, r2);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case less_equal:
-        if (r2.is(zero_reg)) {
-          blez(rs, offset);
-        } else {
-          slt(scratch, r2, rs);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      // Unsigned comparison.
-      case Ugreater:
-        if (r2.is(zero_reg)) {
-          bgtz(rs, offset);
-        } else {
-          sltu(scratch, r2, rs);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case Ugreater_equal:
-        if (r2.is(zero_reg)) {
-          bgez(rs, offset);
-        } else {
-          sltu(scratch, rs, r2);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      case Uless:
-        if (r2.is(zero_reg)) {
-          // No code needs to be emitted.
-          return;
-        } else {
-          sltu(scratch, rs, r2);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case Uless_equal:
-        if (r2.is(zero_reg)) {
-          b(offset);
-        } else {
-          sltu(scratch, r2, rs);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      default:
-        UNREACHABLE();
-    }
-  } else {
-    // Be careful to always use shifted_branch_offset only just before the
-    // branch instruction, as the location will be remember for patching the
-    // target.
-    switch (cond) {
-      case cc_always:
-        b(offset);
-        break;
-      case eq:
-        // We don't want any other register but scratch clobbered.
-        ASSERT(!scratch.is(rs));
-        r2 = scratch;
-        li(r2, rt);
-        beq(rs, r2, offset);
-        break;
-      case ne:
-        // We don't want any other register but scratch clobbered.
-        ASSERT(!scratch.is(rs));
-        r2 = scratch;
-        li(r2, rt);
-        bne(rs, r2, offset);
-        break;
-      // Signed comparison.
-      case greater:
-        if (rt.imm32_ == 0) {
-          bgtz(rs, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          slt(scratch, r2, rs);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case greater_equal:
-        if (rt.imm32_ == 0) {
-          bgez(rs, offset);
-        } else if (is_int16(rt.imm32_)) {
-          slti(scratch, rs, rt.imm32_);
-          beq(scratch, zero_reg, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          slt(scratch, rs, r2);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      case less:
-        if (rt.imm32_ == 0) {
-          bltz(rs, offset);
-        } else if (is_int16(rt.imm32_)) {
-          slti(scratch, rs, rt.imm32_);
-          bne(scratch, zero_reg, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          slt(scratch, rs, r2);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case less_equal:
-        if (rt.imm32_ == 0) {
-          blez(rs, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          slt(scratch, r2, rs);
-          beq(scratch, zero_reg, offset);
-       }
-       break;
-      // Unsigned comparison.
-      case Ugreater:
-        if (rt.imm32_ == 0) {
-          bgtz(rs, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          sltu(scratch, r2, rs);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case Ugreater_equal:
-        if (rt.imm32_ == 0) {
-          bgez(rs, offset);
-        } else if (is_int16(rt.imm32_)) {
-          sltiu(scratch, rs, rt.imm32_);
-          beq(scratch, zero_reg, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          sltu(scratch, rs, r2);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      case Uless:
-        if (rt.imm32_ == 0) {
-          // No code needs to be emitted.
-          return;
-        } else if (is_int16(rt.imm32_)) {
-          sltiu(scratch, rs, rt.imm32_);
-          bne(scratch, zero_reg, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          sltu(scratch, rs, r2);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case Uless_equal:
-        if (rt.imm32_ == 0) {
-          b(offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          sltu(scratch, r2, rs);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      default:
-        UNREACHABLE();
-    }
-  }
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::BranchShort(Label* L, BranchDelaySlot bdslot) {
-  // We use branch_offset as an argument for the branch instructions to be sure
-  // it is called just before generating the branch instruction, as needed.
-
-  b(shifted_branch_offset(L, false));
-
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
-                                 const Operand& rt,
-                                 BranchDelaySlot bdslot) {
-  BRANCH_ARGS_CHECK(cond, rs, rt);
-
-  int32_t offset;
-  Register r2 = no_reg;
-  Register scratch = at;
-  if (rt.is_reg()) {
-    r2 = rt.rm_;
-    // Be careful to always use shifted_branch_offset only just before the
-    // branch instruction, as the location will be remember for patching the
-    // target.
-    switch (cond) {
-      case cc_always:
-        offset = shifted_branch_offset(L, false);
-        b(offset);
-        break;
-      case eq:
-        offset = shifted_branch_offset(L, false);
-        beq(rs, r2, offset);
-        break;
-      case ne:
-        offset = shifted_branch_offset(L, false);
-        bne(rs, r2, offset);
-        break;
-      // Signed comparison
-      case greater:
-        if (r2.is(zero_reg)) {
-          offset = shifted_branch_offset(L, false);
-          bgtz(rs, offset);
-        } else {
-          slt(scratch, r2, rs);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case greater_equal:
-        if (r2.is(zero_reg)) {
-          offset = shifted_branch_offset(L, false);
-          bgez(rs, offset);
-        } else {
-          slt(scratch, rs, r2);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      case less:
-        if (r2.is(zero_reg)) {
-          offset = shifted_branch_offset(L, false);
-          bltz(rs, offset);
-        } else {
-          slt(scratch, rs, r2);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case less_equal:
-        if (r2.is(zero_reg)) {
-          offset = shifted_branch_offset(L, false);
-          blez(rs, offset);
-        } else {
-          slt(scratch, r2, rs);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      // Unsigned comparison.
-      case Ugreater:
-        if (r2.is(zero_reg)) {
-          offset = shifted_branch_offset(L, false);
-           bgtz(rs, offset);
-        } else {
-          sltu(scratch, r2, rs);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case Ugreater_equal:
-        if (r2.is(zero_reg)) {
-          offset = shifted_branch_offset(L, false);
-          bgez(rs, offset);
-        } else {
-          sltu(scratch, rs, r2);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      case Uless:
-        if (r2.is(zero_reg)) {
-          // No code needs to be emitted.
-          return;
-        } else {
-          sltu(scratch, rs, r2);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case Uless_equal:
-        if (r2.is(zero_reg)) {
-          offset = shifted_branch_offset(L, false);
-          b(offset);
-        } else {
-          sltu(scratch, r2, rs);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      default:
-        UNREACHABLE();
-    }
-  } else {
-    // Be careful to always use shifted_branch_offset only just before the
-    // branch instruction, as the location will be remember for patching the
-    // target.
-    switch (cond) {
-      case cc_always:
-        offset = shifted_branch_offset(L, false);
-        b(offset);
-        break;
-      case eq:
-        r2 = scratch;
-        li(r2, rt);
-        offset = shifted_branch_offset(L, false);
-        beq(rs, r2, offset);
-        break;
-      case ne:
-        r2 = scratch;
-        li(r2, rt);
-        offset = shifted_branch_offset(L, false);
-        bne(rs, r2, offset);
-        break;
-      // Signed comparison
-      case greater:
-        if (rt.imm32_ == 0) {
-          offset = shifted_branch_offset(L, false);
-          bgtz(rs, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          slt(scratch, r2, rs);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case greater_equal:
-        if (rt.imm32_ == 0) {
-          offset = shifted_branch_offset(L, false);
-          bgez(rs, offset);
-        } else if (is_int16(rt.imm32_)) {
-          slti(scratch, rs, rt.imm32_);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          slt(scratch, rs, r2);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      case less:
-        if (rt.imm32_ == 0) {
-          offset = shifted_branch_offset(L, false);
-          bltz(rs, offset);
-        } else if (is_int16(rt.imm32_)) {
-          slti(scratch, rs, rt.imm32_);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          slt(scratch, rs, r2);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case less_equal:
-        if (rt.imm32_ == 0) {
-          offset = shifted_branch_offset(L, false);
-          blez(rs, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          slt(scratch, r2, rs);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      // Unsigned comparison.
-      case Ugreater:
-        if (rt.imm32_ == 0) {
-          offset = shifted_branch_offset(L, false);
-          bgtz(rs, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          sltu(scratch, r2, rs);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case Ugreater_equal:
-        if (rt.imm32_ == 0) {
-          offset = shifted_branch_offset(L, false);
-          bgez(rs, offset);
-        } else if (is_int16(rt.imm32_)) {
-          sltiu(scratch, rs, rt.imm32_);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          sltu(scratch, rs, r2);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-     case Uless:
-        if (rt.imm32_ == 0) {
-          // No code needs to be emitted.
-          return;
-        } else if (is_int16(rt.imm32_)) {
-          sltiu(scratch, rs, rt.imm32_);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          sltu(scratch, rs, r2);
-          offset = shifted_branch_offset(L, false);
-          bne(scratch, zero_reg, offset);
-        }
-        break;
-      case Uless_equal:
-        if (rt.imm32_ == 0) {
-          offset = shifted_branch_offset(L, false);
-          b(offset);
-        } else {
-          r2 = scratch;
-          li(r2, rt);
-          sltu(scratch, r2, rs);
-          offset = shifted_branch_offset(L, false);
-          beq(scratch, zero_reg, offset);
-        }
-        break;
-      default:
-        UNREACHABLE();
-    }
-  }
-  // Check that offset could actually hold on an int16_t.
-  ASSERT(is_int16(offset));
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::BranchAndLink(int16_t offset, BranchDelaySlot bdslot) {
-  BranchAndLinkShort(offset, bdslot);
-}
-
-
-void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
-                                   const Operand& rt,
-                                   BranchDelaySlot bdslot) {
-  BranchAndLinkShort(offset, cond, rs, rt, bdslot);
-}
-
-
-void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
-  bool is_label_near = is_near(L);
-  if (UseAbsoluteCodePointers() && !is_label_near) {
-    Jalr(L, bdslot);
-  } else {
-    BranchAndLinkShort(L, bdslot);
-  }
-}
-
-
-void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
-                                   const Operand& rt,
-                                   BranchDelaySlot bdslot) {
-  bool is_label_near = is_near(L);
-  if (UseAbsoluteCodePointers() && !is_label_near) {
-    Label skip;
-    Condition neg_cond = NegateCondition(cond);
-    BranchShort(&skip, neg_cond, rs, rt);
-    Jalr(L, bdslot);
-    bind(&skip);
-  } else {
-    BranchAndLinkShort(L, cond, rs, rt, bdslot);
-  }
-}
-
-
-// We need to use a bgezal or bltzal, but they can't be used directly with the
-// slt instructions. We could use sub or add instead but we would miss overflow
-// cases, so we keep slt and add an intermediate third instruction.
-void MacroAssembler::BranchAndLinkShort(int16_t offset,
-                                        BranchDelaySlot bdslot) {
-  bal(offset);
-
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
-                                        Register rs, const Operand& rt,
-                                        BranchDelaySlot bdslot) {
-  BRANCH_ARGS_CHECK(cond, rs, rt);
-  Register r2 = no_reg;
-  Register scratch = at;
-
-  if (rt.is_reg()) {
-    r2 = rt.rm_;
-  } else if (cond != cc_always) {
-    r2 = scratch;
-    li(r2, rt);
-  }
-
-  switch (cond) {
-    case cc_always:
-      bal(offset);
-      break;
-    case eq:
-      bne(rs, r2, 2);
-      nop();
-      bal(offset);
-      break;
-    case ne:
-      beq(rs, r2, 2);
-      nop();
-      bal(offset);
-      break;
-
-    // Signed comparison
-    case greater:
-      slt(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      bgezal(scratch, offset);
-      break;
-    case greater_equal:
-      slt(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      bltzal(scratch, offset);
-      break;
-    case less:
-      slt(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      bgezal(scratch, offset);
-      break;
-    case less_equal:
-      slt(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      bltzal(scratch, offset);
-      break;
-
-    // Unsigned comparison.
-    case Ugreater:
-      sltu(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      bgezal(scratch, offset);
-      break;
-    case Ugreater_equal:
-      sltu(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      bltzal(scratch, offset);
-      break;
-    case Uless:
-      sltu(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      bgezal(scratch, offset);
-      break;
-    case Uless_equal:
-      sltu(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      bltzal(scratch, offset);
-      break;
-
-    default:
-      UNREACHABLE();
-  }
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::BranchAndLinkShort(Label* L, BranchDelaySlot bdslot) {
-  bal(shifted_branch_offset(L, false));
-
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
-                                        const Operand& rt,
-                                        BranchDelaySlot bdslot) {
-  BRANCH_ARGS_CHECK(cond, rs, rt);
-
-  int32_t offset;
-  Register r2 = no_reg;
-  Register scratch = at;
-  if (rt.is_reg()) {
-    r2 = rt.rm_;
-  } else if (cond != cc_always) {
-    r2 = scratch;
-    li(r2, rt);
-  }
-
-  switch (cond) {
-    case cc_always:
-      offset = shifted_branch_offset(L, false);
-      bal(offset);
-      break;
-    case eq:
-      bne(rs, r2, 2);
-      nop();
-      offset = shifted_branch_offset(L, false);
-      bal(offset);
-      break;
-    case ne:
-      beq(rs, r2, 2);
-      nop();
-      offset = shifted_branch_offset(L, false);
-      bal(offset);
-      break;
-
-    // Signed comparison
-    case greater:
-      slt(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bgezal(scratch, offset);
-      break;
-    case greater_equal:
-      slt(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bltzal(scratch, offset);
-      break;
-    case less:
-      slt(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bgezal(scratch, offset);
-      break;
-    case less_equal:
-      slt(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bltzal(scratch, offset);
-      break;
-
-    // Unsigned comparison.
-    case Ugreater:
-      sltu(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bgezal(scratch, offset);
-      break;
-    case Ugreater_equal:
-      sltu(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bltzal(scratch, offset);
-      break;
-    case Uless:
-      sltu(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bgezal(scratch, offset);
-      break;
-    case Uless_equal:
-      sltu(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bltzal(scratch, offset);
-      break;
-
-    default:
-      UNREACHABLE();
-  }
-
-  // Check that offset could actually hold on an int16_t.
-  ASSERT(is_int16(offset));
-
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::J(Label* L, BranchDelaySlot bdslot) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-
-  uint32_t imm28;
-  imm28 = jump_address(L);
-  imm28 &= kImm28Mask;
-  { BlockGrowBufferScope block_buf_growth(this);
-    // Buffer growth (and relocation) must be blocked for internal references
-    // until associated instructions are emitted and available to be patched.
-    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-    j(imm28);
-  }
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-
-  uint32_t imm32;
-  imm32 = jump_address(L);
-  { BlockGrowBufferScope block_buf_growth(this);
-    // Buffer growth (and relocation) must be blocked for internal references
-    // until associated instructions are emitted and available to be patched.
-    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-    lui(at, (imm32 & kHiMask) >> kLuiShift);
-    ori(at, at, (imm32 & kImm16Mask));
-  }
-  jr(at);
-
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-
-  uint32_t imm32;
-  imm32 = jump_address(L);
-  { BlockGrowBufferScope block_buf_growth(this);
-    // Buffer growth (and relocation) must be blocked for internal references
-    // until associated instructions are emitted and available to be patched.
-    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-    lui(at, (imm32 & kHiMask) >> kLuiShift);
-    ori(at, at, (imm32 & kImm16Mask));
-  }
-  jalr(at);
-
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::Jump(const Operand& target, BranchDelaySlot bdslot) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-  if (target.is_reg()) {
-      jr(target.rm());
-  } else {
-    if (!MustUseReg(target.rmode_) && IsJumpTargetInRange(target.imm32_)) {
-        j(target.imm32_);
-    } else {
-      li(t9, target);
-      jr(t9);
-    }
-  }
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-void MacroAssembler::Jump(const Operand& target,
-                          Condition cond, Register rs, const Operand& rt,
-                          BranchDelaySlot bdslot) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-  BRANCH_ARGS_CHECK(cond, rs, rt);
-  if (target.is_reg()) {
-    if (cond == cc_always) {
-      jr(target.rm());
-    } else {
-      Branch(2, NegateCondition(cond), rs, rt);
-      jr(target.rm());
-    }
-  } else {  // Not register target.
-    if (!MustUseReg(target.rmode_) && IsJumpTargetInRange(target.imm32_)) {
-      if (cond == cc_always) {
-        j(target.imm32_);
-      } else {
-        Branch(2, NegateCondition(cond), rs, rt);
-        j(target.imm32_);  // Will generate only one instruction.
-      }
-    } else {  // MustUseReg(target)
-      li(t9, target);
-      if (cond == cc_always) {
-        jr(t9);
-      } else {
-        Branch(2, NegateCondition(cond), rs, rt);
-        jr(t9);  // Will generate only one instruction.
-      }
-    }
-  }
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
 void MacroAssembler::AdduAndCheckForOverflow(Register dst,
                                              Register left,
                                              Register right,
@@ -2246,12 +2311,6 @@ void MacroAssembler::ClampUint8(Register output_reg, Register input_reg) {
 }
 
 
-int MacroAssembler::CallSize(Register target) {
-  int size = 2;
-  return size * kInstrSize;
-}
-
-
 void MacroAssembler::EmitECMATruncate(Register result,
                                       FPURegister double_input,
                                       FPURegister single_scratch,
@@ -2295,68 +2354,6 @@ void MacroAssembler::EmitECMATruncate(Register result,
                               input_low,
                               scratch);
   bind(&done);
-}
-
-
-int MacroAssembler::CallSize(Address target,
-                             RelocInfo::Mode rmode) {
-  int size = CallSize(t9);
-  return size + 2 * kInstrSize;
-}
-
-
-// Note: To call gcc-compiled C code on mips, you must call thru t9.
-void MacroAssembler::Call(const Operand& target, BranchDelaySlot bdslot) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-  if (target.is_reg()) {
-    jalr(target.rm());
-  } else {    // !target.is_reg()
-    // Must record previous source positions before the
-    // li() generates a new code target.
-    positions_recorder()->WriteRecordedPositions();
-    li(t9, target);
-    jalr(t9);
-  }
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
-}
-
-
-// Note: To call gcc-compiled C code on mips, you must call thru t9.
-void MacroAssembler::Call(const Operand& target,
-                          Condition cond, Register rs, const Operand& rt,
-                          BranchDelaySlot bdslot) {
-  BlockTrampolinePoolScope block_trampoline_pool(this);
-  BRANCH_ARGS_CHECK(cond, rs, rt);
-  if (target.is_reg()) {
-    if (cond == cc_always) {
-      jalr(target.rm());
-    } else {
-      Branch(2, NegateCondition(cond), rs, rt);
-      jalr(target.rm());
-    }
-  } else {    // !target.is_reg()
-    if (!MustUseReg(target.rmode_) && IsJumpTargetInRange(target.imm32_)) {
-      if (cond == cc_always) {
-        jal(target.imm32_);
-      } else {
-        Branch(2, NegateCondition(cond), rs, rt);
-        jal(target.imm32_);  // Will generate only one instruction.
-      }
-    } else {  // MustUseReg(target)
-      li(t9, target);
-      if (cond == cc_always) {
-        jalr(t9);
-      } else {
-        Branch(2, NegateCondition(cond), rs, rt);
-        jalr(t9);  // Will generate only one instruction.
-      }
-    }
-  }
-  // Emit a nop in the branch delay slot if required.
-  if (bdslot == PROTECT)
-    nop();
 }
 
 
