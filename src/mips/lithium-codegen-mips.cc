@@ -632,7 +632,15 @@ void LCodeGen::DeoptimizeIf(Condition cc,
   } else {
     // TODO(plind): The Arm port is a little different here, due to their
     // DeOpt jump table, which is not used for Mips yet.
-    __ Jump(entry, RelocInfo::RUNTIME_ENTRY, cc, src1, src2);
+
+    // By branching over the jump (and not pre-loading t9) we save 2
+    // instructions when the jump is not taken and lose 1 when it is.
+    Label skip;
+    __ Branch(USE_DELAY_SLOT, &skip, NegateCondition(cc), src1, src2);
+    __ li(t9,
+        Operand(reinterpret_cast<int32_t>(entry), RelocInfo::RUNTIME_ENTRY));
+    __ Jump(t9);
+    __ bind(&skip);
   }
 }
 
