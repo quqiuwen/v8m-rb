@@ -378,12 +378,6 @@ int LCodeGen::ToInteger32(LConstantOperand* op) const {
 }
 
 
-double LCodeGen::ToDouble(LConstantOperand* op) const {
-  Handle<Object> value = chunk_->LookupLiteral(op);
-  return value->Number();
-}
-
-
 Operand LCodeGen::ToOperand(LOperand* op) {
   if (op->IsConstantOperand()) {
     LConstantOperand* const_op = LConstantOperand::cast(op);
@@ -1570,54 +1564,44 @@ Condition LCodeGen::TokenToCondition(Token::Value op, bool is_unsigned) {
 }
 
 
+void LCodeGen::EmitCmpI(LOperand* left, LOperand* right) {
+  // This function must never be called for Mips.
+  // It is just a compare, it should be generated inline as
+  // part of the branch that uses it. It should always remain
+  // as un-implemented function.
+  // arm: __ cmp(ToRegister(left), ToRegister(right));
+  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+}
+
+
 void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
   LOperand* left = instr->InputAt(0);
   LOperand* right = instr->InputAt(1);
   int false_block = chunk_->LookupDestination(instr->false_block_id());
   int true_block = chunk_->LookupDestination(instr->true_block_id());
 
-  Condition cond = TokenToCondition(instr->op(), false);
+  Condition cc = TokenToCondition(instr->op(), instr->is_double());
 
-  if (left->IsConstantOperand() && right->IsConstantOperand()) {
-    // We can statically evaluate the comparison.
-    double left_val = ToDouble(LConstantOperand::cast(left));
-    double right_val = ToDouble(LConstantOperand::cast(right));
-    int next_block =
-      EvalComparison(instr->op(), left_val, right_val) ? true_block
-                                                       : false_block;
-    EmitGoto(next_block);
+  if (instr->is_double()) {
+    // Compare left and right as doubles and load the
+    // resulting flags into the normal status register.
+    FPURegister left_reg = ToDoubleRegister(left);
+    FPURegister right_reg = ToDoubleRegister(right);
+
+    // If a NaN is involved, i.e. the result is unordered,
+    // jump to false block label.
+    __ BranchF(NULL, chunk_->GetAssemblyLabel(false_block), eq,
+               left_reg, right_reg);
+
+    EmitBranchF(true_block, false_block, cc, left_reg, right_reg);
   } else {
-    if (instr->is_double()) {
-      // Compare left and right as doubles and load the
-      // resulting flags into the normal status register.
-      FPURegister left_reg = ToDoubleRegister(left);
-      FPURegister right_reg = ToDoubleRegister(right);
-
-      // If a NaN is involved, i.e. the result is unordered,
-      // jump to false block label.
-      __ BranchF(NULL, chunk_->GetAssemblyLabel(false_block), eq,
-                 left_reg, right_reg);
-
-      EmitBranchF(true_block, false_block, cond, left_reg, right_reg);
-    } else {
-      Register cmp_left;
-      Operand cmp_right = Operand(0);
-
-      if (right->IsConstantOperand()) {
-        cmp_left = ToRegister(left);
-        cmp_right = Operand(ToInteger32(LConstantOperand::cast(right)));
-      } else if (left->IsConstantOperand()) {
-        cmp_left = ToRegister(right);
-        cmp_right = Operand(ToInteger32(LConstantOperand::cast(left)));
-        // We transposed the operands. Reverse the condition.
-        cond = ReverseCondition(cond);
-      } else {
-        cmp_left = ToRegister(left);
-        cmp_right = Operand(ToRegister(right));
-      }
-
-      EmitBranch(true_block, false_block, cond, cmp_left, cmp_right);
-    }
+    // EmitCmpI cannot be used on MIPS.
+    // EmitCmpI(left, right);
+    EmitBranch(true_block,
+               false_block,
+               cc,
+               ToRegister(left),
+               Operand(ToRegister(right)));
   }
 }
 

@@ -86,7 +86,6 @@ class LCodeGen BASE_EMBEDDED {
                                         FloatRegister flt_scratch,
                                         DoubleRegister dbl_scratch);
   int ToInteger32(LConstantOperand* op) const;
-  double ToDouble(LConstantOperand* op) const;
   Operand ToOperand(LOperand* op);
   MemOperand ToMemOperand(LOperand* op) const;
   // Returns a MemOperand pointing to the high word of a DoubleStackSlot.
