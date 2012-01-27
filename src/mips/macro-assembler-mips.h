@@ -56,7 +56,7 @@ class JumpTarget;
 const Register lithiumScratchReg = s3;  // Scratch register.
 const Register lithiumScratchReg2 = s4;  // Scratch register.
 const Register condReg = s5;  // Simulated (partial) condition code for mips.
-const Register roots = s6;  // Roots array pointer.
+const Register kRootRegister = s6;  // Roots array pointer.
 const Register cp = s7;     // JavaScript context pointer.
 const Register fp = s8_fp;  // Alias for fp.
 const DoubleRegister lithiumScratchDouble = f30;  // Double scratch register.
@@ -693,6 +693,13 @@ class MacroAssembler: public Assembler {
   void LoadGlobalFunctionInitialMap(Register function,
                                     Register map,
                                     Register scratch);
+
+
+  void InitializeRootRegister() {
+    ExternalReference roots_address =
+        ExternalReference::roots_address(isolate());
+    li(kRootRegister, Operand(roots_address));
+  }
 
 
   // -------------------------------------------------------------------------
