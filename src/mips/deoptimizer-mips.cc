@@ -114,6 +114,7 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 
   Isolate* isolate = code->GetIsolate();
 
+
   // Add the deoptimizing code to the list.
   DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
   DeoptimizerData* data = isolate->deoptimizer_data();
@@ -157,15 +158,10 @@ void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
 
   ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 5 * kInstrSize)));
 
-  // Replace the sltu instruction with load-imm 1 to at, so beq is not taken.
+  // Replace the sltu instruction so beq is not executed.
   CodePatcher patcher(pc_after - 6 * kInstrSize, 1);
   patcher.masm()->addiu(at, zero_reg, 1);
 
-  // Replace the stack check address in the load-immediate (lui/ori pair)
-  // with the entry address of the replacement code.
-  ASSERT(reinterpret_cast<uint32_t>(
-      Assembler::target_address_at(pc_after - 4 * kInstrSize)) ==
-      reinterpret_cast<uint32_t>(check_code->entry()));
   Assembler::set_target_address_at(pc_after - 4 * kInstrSize,
                                    replacement_code->entry());
 
@@ -177,9 +173,6 @@ void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
   // jalr t9  ;; Not changed
   // nop  ;; Not changed
   // ----- pc_after points here
-
-  unoptimized_code->GetHeap()->incremental_marking()->RecordCodeTargetPatch(
-      unoptimized_code, pc_after - 4 * kInstrSize, replacement_code);
 }
 
 
@@ -192,20 +185,12 @@ void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
       Assembler::instr_at(pc_after - 6 * kInstrSize)));
   ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 5 * kInstrSize)));
 
-  // Restore the sltu instruction so beq can be taken again.
+  // Restore the sltu instruction so beq can possibly be executed again.
   CodePatcher patcher(pc_after - 6 * kInstrSize, 1);
   patcher.masm()->sltu(at, sp, t0);
 
-  // Replace the on-stack replacement address in the load-immediate (lui/ori
-  // pair) with the entry address of the normal stack-check code.
-  ASSERT(reinterpret_cast<uint32_t>(
-      Assembler::target_address_at(pc_after - 4 * kInstrSize)) ==
-      reinterpret_cast<uint32_t>(replacement_code->entry()));
   Assembler::set_target_address_at(pc_after - 4 * kInstrSize,
                                    check_code->entry());
-
-  check_code->GetHeap()->incremental_marking()->RecordCodeTargetPatch(
-      unoptimized_code, pc_after - 4 * kInstrSize, check_code);
 }
 
 
@@ -600,7 +585,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ Subu(sp, sp, kNumberOfRegisters * kPointerSize);
   for (int16_t i = kNumberOfRegisters - 1; i >= 0; i--) {
     if ((saved_regs & (1 << i)) != 0) {
-      __ sw(ToRegister(i), MemOperand(sp, kPointerSize * i));
+      __ sw(ToRegister(i), MemOperand(sp, 4 * i));
     }
   }
 
@@ -716,6 +701,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   // a1 = one past the last FrameDescription**.
   __ lw(a1, MemOperand(a0, Deoptimizer::output_count_offset()));
   __ lw(a0, MemOperand(a0, Deoptimizer::output_offset()));  // a0 is output_.
+  // __ add(r1, r0, Operand(r1, LSL, 2));
   __ sll(a1, a1, kPointerSizeLog2);  // Count to offset.
   __ addu(a1, a0, a1);  // a1 = one past the last FrameDescription**.
   __ bind(&outer_push_loop);
