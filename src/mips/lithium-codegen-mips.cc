@@ -2207,7 +2207,7 @@ void LCodeGen::EmitLoadFieldOrConstantFunction(Register result,
                                                Register object,
                                                Handle<Map> type,
                                                Handle<String> name) {
-  LookupResult lookup(isolate());
+  LookupResult lookup;
   type->LookupInDescriptors(NULL, *name, &lookup);
   ASSERT(lookup.IsProperty() &&
          (lookup.type() == FIELD || lookup.type() == CONSTANT_FUNCTION));
