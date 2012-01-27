@@ -2062,6 +2062,9 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
   // On MIPS there is no need for a "no inlined smi code" marker (nop).
 
   Condition condition = ComputeCompareCondition(op);
+  if (op == Token::GT || op == Token::LTE) {
+    condition = ReverseCondition(condition);
+  }
   // A minor optimization that relies on LoadRoot always emitting one
   // instruction.
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
