@@ -617,10 +617,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ li(t1, Operand(ExternalReference::isolate_address()));
   __ sw(t1, CFunctionArgumentOperand(6));  // Isolate.
   // Call Deoptimizer::New().
-  {
-    AllowExternalCallThatCantCauseGC scope(masm());
-    __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate), 6);
-  }
+  __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate), 6);
+
 
   // Preserve "deoptimizer" object in register v0 and get the input
   // frame descriptor pointer to a1 (deoptimizer->input_);
@@ -680,11 +678,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   // a0: deoptimizer object; a1: scratch.
   __ PrepareCallCFunction(1, a1);
   // Call Deoptimizer::ComputeOutputFrames().
-  {
-    AllowExternalCallThatCantCauseGC scope(masm());
-    __ CallCFunction(
-        ExternalReference::compute_output_frames_function(isolate), 1);
-  }
+  __ CallCFunction(
+      ExternalReference::compute_output_frames_function(isolate), 1);
   __ pop(a0);  // Restore deoptimizer object (class Deoptimizer).
 
   // Replace the current (input) frame with the output frames.

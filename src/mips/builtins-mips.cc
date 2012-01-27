@@ -1157,13 +1157,12 @@ void Builtins::Generate_LazyRecompile(MacroAssembler* masm) {
 
 static void Generate_NotifyDeoptimizedHelper(MacroAssembler* masm,
                                              Deoptimizer::BailoutType type) {
-  {
-    FrameScope scope(masm, StackFrame::INTERNAL);
-    // Pass the function and deoptimization type to the runtime system.
-    __ li(a0, Operand(Smi::FromInt(static_cast<int>(type))));
-    __ push(a0);
-    __ CallRuntime(Runtime::kNotifyDeoptimized, 1);
-  }
+  __ EnterInternalFrame();
+  // Pass the function and deoptimization type to the runtime system.
+  __ li(a0, Operand(Smi::FromInt(static_cast<int>(type))));
+  __ push(a0);
+  __ CallRuntime(Runtime::kNotifyDeoptimized, 1);
+  __ LeaveInternalFrame();
 
   // Get the full codegen state from the stack and untag it -> t2.
   __ lw(t2, MemOperand(sp, 0 * kPointerSize));
@@ -1205,10 +1204,9 @@ void Builtins::Generate_NotifyOSR(MacroAssembler* masm) {
   RegList saved_regs =
       (kJSCallerSaved | kCalleeSaved | ra.bit() | fp.bit()) & ~sp.bit();
   __ MultiPush(saved_regs);
-  {
-    FrameScope scope(masm, StackFrame::INTERNAL);
-    __ CallRuntime(Runtime::kNotifyOSR, 0);
-  }
+  __ EnterInternalFrame();
+  __ CallRuntime(Runtime::kNotifyOSR, 0);
+  __ LeaveInternalFrame();
   __ MultiPop(saved_regs);
   __ Ret();
 }
@@ -1224,11 +1222,10 @@ void Builtins::Generate_OnStackReplacement(MacroAssembler* masm) {
   // Lookup the function in the JavaScript frame and push it as an
   // argument to the on-stack replacement function.
   __ lw(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
-  {
-    FrameScope scope(masm, StackFrame::INTERNAL);
-    __ push(a0);
-    __ CallRuntime(Runtime::kCompileForOnStackReplacement, 1);
-  }
+  __ EnterInternalFrame();
+  __ push(a0);
+  __ CallRuntime(Runtime::kCompileForOnStackReplacement, 1);
+  __ LeaveInternalFrame();
 
   // If the result was -1 it means that we couldn't optimize the
   // function. Just return and continue in the unoptimized version.
