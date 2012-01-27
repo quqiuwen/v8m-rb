@@ -1814,33 +1814,27 @@ void LCodeGen::EmitClassOfTest(Label* is_true,
   ASSERT(!input.is(temp));
   ASSERT(!temp.is(temp2));  // But input and temp2 may be the same register.
   __ JumpIfSmi(input, is_false);
+  __ GetObjectType(input, temp, temp2);
+  __ Branch(is_false, lt, temp2, Operand(FIRST_SPEC_OBJECT_TYPE));
 
+  // Map is now in temp.
+  // Functions have class 'Function'.
+  __ lbu(temp2, FieldMemOperand(temp, Map::kInstanceTypeOffset));
   if (class_name->IsEqualTo(CStrVector("Function"))) {
-    // Assuming the following assertions, we can use the same compares to test
-    // for both being a function type and being in the object type range.
-    STATIC_ASSERT(NUM_OF_CALLABLE_SPEC_OBJECT_TYPES == 2);
-    STATIC_ASSERT(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE ==
-                  FIRST_SPEC_OBJECT_TYPE + 1);
-    STATIC_ASSERT(LAST_NONCALLABLE_SPEC_OBJECT_TYPE ==
-                  LAST_SPEC_OBJECT_TYPE - 1);
-    STATIC_ASSERT(LAST_SPEC_OBJECT_TYPE == LAST_TYPE);
-
-    __ GetObjectType(input, temp, temp2);
-    __ Branch(is_false, lt, temp2, Operand(FIRST_SPEC_OBJECT_TYPE));
-    __ Branch(is_true, eq, temp2, Operand(FIRST_SPEC_OBJECT_TYPE));
-    __ Branch(is_true, eq, temp2, Operand(LAST_SPEC_OBJECT_TYPE));
+    __ Branch(is_true, ge, temp2, Operand(FIRST_CALLABLE_SPEC_OBJECT_TYPE));
   } else {
-    // Faster code path to avoid two compares: subtract lower bound from the
-    // actual type and do a signed compare with the width of the type range.
-    __ GetObjectType(input, temp, temp2);
-    __ Subu(temp2, temp2, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
-    __ Branch(is_false, gt, temp2, Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE -
-                                           FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
+    __ Branch(is_false, ge, temp2, Operand(FIRST_CALLABLE_SPEC_OBJECT_TYPE));
   }
 
-  // Now we are in the FIRST-LAST_NONCALLABLE_SPEC_OBJECT_TYPE range.
   // Check if the constructor in the map is a function.
   __ lw(temp, FieldMemOperand(temp, Map::kConstructorOffset));
+
+  // As long as LAST_CALLABLE_SPEC_OBJECT_TYPE is the last instance type and
+  // FIRST_CALLABLE_SPEC_OBJECT_TYPE comes right after
+  // LAST_NONCALLABLE_SPEC_OBJECT_TYPE, we can avoid checking for the latter.
+  STATIC_ASSERT(LAST_TYPE == LAST_CALLABLE_SPEC_OBJECT_TYPE);
+  STATIC_ASSERT(FIRST_CALLABLE_SPEC_OBJECT_TYPE ==
+                LAST_NONCALLABLE_SPEC_OBJECT_TYPE + 1);
 
   // Objects with a non-function constructor have class 'Object'.
   __ GetObjectType(temp, temp2, temp2);
@@ -4332,13 +4326,11 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
     final_branch_condition = ne;
 
   } else if (type_name->Equals(heap()->function_symbol())) {
-    STATIC_ASSERT(NUM_OF_CALLABLE_SPEC_OBJECT_TYPES == 2);
     __ JumpIfSmi(input, false_label);
-    __ GetObjectType(input, scratch, input);
-    __ Branch(true_label, eq, input, Operand(JS_FUNCTION_TYPE));
-    cmp1 = input;
-    cmp2 = Operand(JS_FUNCTION_PROXY_TYPE);
-    final_branch_condition = eq;
+    __ GetObjectType(input, input, scratch);
+    cmp1 = scratch;
+    cmp2 = Operand(FIRST_CALLABLE_SPEC_OBJECT_TYPE);
+    final_branch_condition = ge;
 
   } else if (type_name->Equals(heap()->object_symbol())) {
     __ JumpIfSmi(input, false_label);
