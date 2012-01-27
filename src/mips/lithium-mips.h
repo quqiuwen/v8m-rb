@@ -2160,8 +2160,7 @@ class LChunkBuilder BASE_EMBEDDED {
       LInstruction* instr, int ast_id);
   void ClearInstructionPendingDeoptimizationEnvironment();
 
-  LEnvironment* CreateEnvironment(HEnvironment* hydrogen_env,
-                                  int* argument_index_accumulator);
+  LEnvironment* CreateEnvironment(HEnvironment* hydrogen_env);
 
   void VisitInstruction(HInstruction* current);
 
