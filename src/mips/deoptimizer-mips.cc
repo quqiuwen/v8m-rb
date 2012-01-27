@@ -112,12 +112,9 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
   }
 #endif
 
-  Isolate* isolate = code->GetIsolate();
-
-
   // Add the deoptimizing code to the list.
   DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
-  DeoptimizerData* data = isolate->deoptimizer_data();
+  DeoptimizerData* data = code->GetIsolate()->deoptimizer_data();
   node->set_next(data->deoptimizing_code_list_);
   data->deoptimizing_code_list_ = node;
 
