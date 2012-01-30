@@ -6751,18 +6751,19 @@ MaybeObject* StringDictionaryLookupStub::GenerateNegativeLookup(
 
   const int spill_mask =
       (ra.bit() | t2.bit() | t1.bit() | t0.bit() | a3.bit() |
-       a2.bit() | a1.bit() | a0.bit());
+       a2.bit() | a1.bit() | a0.bit() | v1.bit());
 
   __ MultiPush(spill_mask);
   __ lw(a0, FieldMemOperand(receiver, JSObject::kPropertiesOffset));
   __ li(a1, Operand(Handle<String>(name)));
   StringDictionaryLookupStub stub(NEGATIVE_LOOKUP);
   MaybeObject* result = masm->TryCallStub(&stub);
+  __ mov(at, v0);
   if (result->IsFailure()) return result;
   __ MultiPop(spill_mask);
 
-  __ Branch(done, eq, v0, Operand(zero_reg));
-  __ Branch(miss, ne, v0, Operand(zero_reg));
+  __ Branch(done, eq, at, Operand(zero_reg));
+  __ Branch(miss, ne, at, Operand(zero_reg));
   return result;
 }
 
@@ -6821,19 +6822,26 @@ void StringDictionaryLookupStub::GeneratePositiveLookup(MacroAssembler* masm,
 
   const int spill_mask =
       (ra.bit() | t2.bit() | t1.bit() | t0.bit() |
-       a3.bit() | a2.bit() | a1.bit() | a0.bit()) &
+       a3.bit() | a2.bit() | a1.bit() | a0.bit() | v0.bit()) &
       ~(scratch1.bit() | scratch2.bit());
 
   __ MultiPush(spill_mask);
-  __ Move(a0, elements);
-  __ Move(a1, name);
+  if (name.is(a0)) {
+    ASSERT(!elements.is(a1));
+    __ Move(a1, name);
+    __ Move(a0, elements);
+  } else {
+    __ Move(a0, elements);
+    __ Move(a1, name);
+  }
   StringDictionaryLookupStub stub(POSITIVE_LOOKUP);
   __ CallStub(&stub);
   __ mov(scratch2, a2);
+  __ mov(at, v0);
   __ MultiPop(spill_mask);
 
-  __ Branch(done, ne, v0, Operand(zero_reg));
-  __ Branch(miss, eq, v0, Operand(zero_reg));
+  __ Branch(done, ne, at, Operand(zero_reg));
+  __ Branch(miss, eq, at, Operand(zero_reg));
 }
 
 
