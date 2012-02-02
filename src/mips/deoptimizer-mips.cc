@@ -844,21 +844,26 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
 
   // Create a sequence of deoptimization entries. Note that any
   // registers may be still live.
-  Label glob_start;
-  __ bind(&glob_start);
+  Label table_start;
+  __ bind(&table_start);
   for (int i = 0; i < count(); i++) {
     Label start;
     __ bind(&start);
-    int extra_stack_slots = 0;
     if (type() != EAGER) {
       // Emulate ia32 like call by pushing return address to stack.
-      extra_stack_slots += 1;
-      __ sw(ra, MemOperand(sp, -kPointerSize));
+      __ addiu(sp, sp, -3 * kPointerSize);
+      __ sw(ra, MemOperand(sp, 2 * kPointerSize));
+    } else {
+      __ addiu(sp, sp, -2 * kPointerSize);
     }
-    __ li(at, Operand(i));
-    __ addiu(sp, sp, -(extra_stack_slots + 1) * kPointerSize);
-    __ sw(at, MemOperand(sp));
-    __ sw(ra, MemOperand(sp, -kPointerSize));
+    // Using ori makes sure only one instruction is generated. This will work
+    // as long as the number of deopt entries is below 2^16.
+    __ ori(at, zero_reg, i);
+    __ sw(at, MemOperand(sp, kPointerSize));
+    __ sw(ra, MemOperand(sp, 0));
+    // This branch instruction only jumps over one instruction, and that is
+    // executed in the delay slot. The result is that execution is linear but
+    // the ra register is updated.
     __ bal(1);
     // Jump over the remaining deopt entries (including this one).
     // Only include the remaining part of the current entry in the calculation.
@@ -866,8 +871,9 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     const int cur_size = masm()->SizeOfCodeGeneratedSince(&start);
     // ra points to the instruction after the delay slot. Adjust by 4.
     __ Addu(at, ra, remaining_entries - cur_size - Assembler::kInstrSize);
+    __ lw(ra, MemOperand(sp, 0));
     __ jr(at);
-    __ lw(ra, MemOperand(sp, -kPointerSize));
+    __ addiu(sp, sp, kPointerSize);
 
     // Pad the rest of the code.
     while (table_entry_size_ > (masm()->SizeOfCodeGeneratedSince(&start))) {
@@ -877,7 +883,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     ASSERT_EQ(table_entry_size_, masm()->SizeOfCodeGeneratedSince(&start));
   }
 
-  ASSERT_EQ(masm()->SizeOfCodeGeneratedSince(&glob_start),
+  ASSERT_EQ(masm()->SizeOfCodeGeneratedSince(&table_start),
       count() * table_entry_size_);
 }
 
