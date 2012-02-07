@@ -872,8 +872,8 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     // ra points to the instruction after the delay slot. Adjust by 4.
     __ Addu(at, ra, remaining_entries - cur_size - Assembler::kInstrSize);
     __ lw(ra, MemOperand(sp, 0));
-    __ jr(at);
-    __ addiu(sp, sp, kPointerSize);
+    __ jr(at);  // Expose delay slot.
+    __ addiu(sp, sp, kPointerSize);  // In delay slot.
 
     // Pad the rest of the code.
     while (table_entry_size_ > (masm()->SizeOfCodeGeneratedSince(&start))) {
