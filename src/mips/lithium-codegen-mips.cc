@@ -2160,9 +2160,14 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
   Label done;
   __ Branch(USE_DELAY_SLOT, &done, condition, v0, Operand(zero_reg));
+#ifdef DEBUG
+  int branchSize = masm()->InstructionsGeneratedSince(&done);
+#endif
   __ LoadRoot(ToRegister(instr->result()), Heap::kTrueValueRootIndex);
   __ LoadRoot(ToRegister(instr->result()), Heap::kFalseValueRootIndex);
-  ASSERT_EQ(3, masm()->InstructionsGeneratedSince(&done));
+#ifdef DEBUG
+  ASSERT_EQ(2, masm()->InstructionsGeneratedSince(&done) - branchSize);
+#endif
   __ bind(&done);
 }
 
@@ -2974,8 +2979,13 @@ void LCodeGen::EmitIntegerMathAbs(LUnaryMathOperation* instr) {
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
   Label done;
   __ Branch(USE_DELAY_SLOT, &done, ge, input, Operand(zero_reg));
+#ifdef DEBUG
+  int branchSize = masm()->InstructionsGeneratedSince(&done);
+#endif
   __ mov(result, input);
-  ASSERT_EQ(2, masm()->InstructionsGeneratedSince(&done));
+#ifdef DEBUG
+  ASSERT_EQ(1, masm()->InstructionsGeneratedSince(&done) - branchSize);
+#endif
   __ subu(result, zero_reg, input);
   // Overflow if result is still negative, i.e. 0x80000000.
   DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
