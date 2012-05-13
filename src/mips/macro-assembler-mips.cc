@@ -1353,8 +1353,7 @@ void MacroAssembler::ConvertToInt32(Register source,
     // conversion using round to zero. Since the FP value was qualified
     // above, the resulting integer should be a legal int32.
     // The original 'Exponent' word is still in scratch.
-    lwc1(double_scratch, FieldMemOperand(source, HeapNumber::kMantissaOffset));
-    mtc1(scratch, FPURegister::from_code(double_scratch.code() + 1));
+    ldc1(double_scratch, FieldMemOperand(source, HeapNumber::kMantissaOffset));
     trunc_w_d(double_scratch, double_scratch);
     mfc1(dest, double_scratch);
   } else {
