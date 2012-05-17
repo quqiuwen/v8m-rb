@@ -4001,7 +4001,7 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
 
         __ bind(&done);
         __ sll(t9, key, 1);
-        __ addu(t9, a2, t9);
+        __ addu(t9, a3, t9);
         __ sw(t3, MemOperand(t9, 0));
 
         // Entry registers are intact, a0 holds the value which is the return
