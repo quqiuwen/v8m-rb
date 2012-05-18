@@ -86,18 +86,15 @@ void CpuFeatures::Probe() {
   // snapshot.
   supported_ |= standard_features;
 
-  if (Serializer::enabled()) {
-    // No probing for features if we might serialize (generate snapshot).
-    return;
-  }
-
   // If the compiler is allowed to use fpu then we can use fpu too in our
   // code generation.
 #if !defined(__mips__)
   // For the simulator=mips build, use FPU when FLAG_enable_fpu is enabled.
+#ifdef CAN_USE_FPU_INSTRUCTIONS
   if (FLAG_enable_fpu) {
       supported_ |= 1u << FPU;
   }
+#endif  // CAN_USE_FPU_INSTRUCTIONS
 #else
   // Probe for additional features not already known to be available.
   if (OS::MipsCpuHasFeature(FPU)) {

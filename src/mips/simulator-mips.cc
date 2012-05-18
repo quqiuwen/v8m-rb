@@ -35,10 +35,11 @@
 
 #include "cpu.h"
 #include "disasm.h"
-#include "assembler.h"
+#include "macro-assembler.h"
 #include "globals.h"    // Need the BitCast.
 #include "mips/constants-mips.h"
 #include "mips/simulator-mips.h"
+#include "checks.h"     // for V8_Fatal
 
 
 // Only build the simulator if not compiling for real MIPS hardware.
@@ -772,6 +773,22 @@ void MipsDebugger::Debug() {
 #undef STR
 #undef XSTR
 }
+
+#define _MSG \
+  "MIPS simu: FPU instruction (0x%0x) found at pc: 0x%0x in softfloat mode"
+static void CheckSoftfloatFPU(Simulator* simu, Instruction* instr) {
+  if (!CpuFeatures::IsSupported(FPU)) {
+    int32_t current_pc = simu->get_pc();
+#ifdef DEBUG
+    PrintF(_MSG"\n", instr->InstructionBits(), current_pc);
+    MipsDebugger dbg(simu);
+    dbg.Debug();
+#else
+    V8_Fatal("", 0, _MSG, instr->InstructionBits(), current_pc);
+#endif
+  }
+}
+#undef _MSG
 
 
 static bool ICacheMatch(void* one, void* two) {
@@ -1963,6 +1980,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   // ---------- Execution.
   switch (op) {
     case COP1:
+      CheckSoftfloatFPU(this, instr);
       switch (instr->RsFieldRaw()) {
         case BC1:   // Branch on coprocessor condition.
           UNREACHABLE();
@@ -2337,6 +2355,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
   switch (op) {
     // ------------- COP1. Coprocessor instructions.
     case COP1:
+      CheckSoftfloatFPU(this, instr);
       switch (instr->RsFieldRaw()) {
         case BC1:   // Branch on coprocessor condition.
           cc = instr->FBccValue();
@@ -2511,15 +2530,18 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     }
     case LWC1:
+      CheckSoftfloatFPU(this, instr);
       addr = rs + se_imm16;
       alu_out = ReadW(addr, instr);
       break;
     case LDC1:
+      CheckSoftfloatFPU(this, instr);
       addr = rs + se_imm16;
       fp_out = ReadD(addr, instr);
       break;
     case SWC1:
     case SDC1:
+      CheckSoftfloatFPU(this, instr);
       addr = rs + se_imm16;
       break;
     default:
@@ -2585,16 +2607,20 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       WriteW(addr, mem_value, instr);
       break;
     case LWC1:
+      CheckSoftfloatFPU(this, instr);
       set_fpu_register(ft_reg, alu_out);
       break;
     case LDC1:
+      CheckSoftfloatFPU(this, instr);
       set_fpu_register_double(ft_reg, fp_out);
       break;
     case SWC1:
+      CheckSoftfloatFPU(this, instr);
       addr = rs + se_imm16;
       WriteW(addr, get_fpu_register(ft_reg), instr);
       break;
     case SDC1:
+      CheckSoftfloatFPU(this, instr);
       addr = rs + se_imm16;
       WriteD(addr, get_fpu_register_double(ft_reg), instr);
       break;
