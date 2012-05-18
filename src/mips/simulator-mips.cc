@@ -35,10 +35,12 @@
 
 #include "cpu.h"
 #include "disasm.h"
-#include "assembler.h"
+#include "macro-assembler.h"
 #include "globals.h"    // Need the BitCast.
 #include "mips/constants-mips.h"
 #include "mips/simulator-mips.h"
+//#include "mips/assembler-mips.h"
+#include "checks.h" // for V8_Fatal
 
 
 // Only build the simulator if not compiling for real MIPS hardware.
@@ -772,6 +774,25 @@ void MipsDebugger::Debug() {
 #undef STR
 #undef XSTR
 }
+
+#define _MSG "MIPS simu: FPU instruction (0x%0x) found at pc: 0x%0x in softfloat mode"
+static void CheckSoftfloatFPU(Simulator* simu, Instruction* instr) {
+  if (IsMipsSoftFloatABI) {
+    int32_t current_pc = simu->get_pc();
+#ifdef DEBUG
+    //if (!CpuFeatures::IsEnabled(FPU)) {
+    PrintF(_MSG"\n", instr->InstructionBits(), current_pc);
+    MipsDebugger dbg(simu);
+    dbg.Debug();
+    //}
+#else
+    //if (!CpuFeatures::IsSupported(FPU)) {
+    V8_Fatal("", 0, _MSG, instr->InstructionBits(), current_pc);
+    //}
+#endif
+  }
+}
+#undef _MSG  
 
 
 static bool ICacheMatch(void* one, void* two) {
@@ -1958,6 +1979,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   // ---------- Execution.
   switch (op) {
     case COP1:
+      CheckSoftfloatFPU(this, instr);
       switch (instr->RsFieldRaw()) {
         case BC1:   // Branch on coprocessor condition.
           UNREACHABLE();
@@ -2332,6 +2354,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
   switch (op) {
     // ------------- COP1. Coprocessor instructions.
     case COP1:
+      CheckSoftfloatFPU(this, instr);
       switch (instr->RsFieldRaw()) {
         case BC1:   // Branch on coprocessor condition.
           cc = instr->FBccValue();
