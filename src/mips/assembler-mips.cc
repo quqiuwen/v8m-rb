@@ -1620,6 +1620,7 @@ void Assembler::ext_(Register rt, Register rs, uint16_t pos, uint16_t size) {
 
 // Load, store, move.
 void Assembler::lwc1(FPURegister fd, const MemOperand& src) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
 }
 
@@ -1627,6 +1628,7 @@ void Assembler::lwc1(FPURegister fd, const MemOperand& src) {
 void Assembler::ldc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // load to two 32-bit loads.
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
   FPURegister nextfpreg;
   nextfpreg.setcode(fd.code() + 1);
@@ -1635,6 +1637,7 @@ void Assembler::ldc1(FPURegister fd, const MemOperand& src) {
 
 
 void Assembler::swc1(FPURegister fd, const MemOperand& src) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
 }
 
@@ -1642,6 +1645,7 @@ void Assembler::swc1(FPURegister fd, const MemOperand& src) {
 void Assembler::sdc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // store to two 32-bit stores.
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
   FPURegister nextfpreg;
   nextfpreg.setcode(fd.code() + 1);
@@ -1650,25 +1654,31 @@ void Assembler::sdc1(FPURegister fd, const MemOperand& src) {
 
 
 void Assembler::mtc1(Register rt, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, MTC1, rt, fs, f0);
 }
 
 
 void Assembler::mfc1(Register rt, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, MFC1, rt, fs, f0);
 }
 
 
 void Assembler::ctc1(Register rt, FPUControlRegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, CTC1, rt, fs);
 }
 
 
 void Assembler::cfc1(Register rt, FPUControlRegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, CFC1, rt, fs);
 }
 
 void Assembler::DoubleAsTwoUInt32(double d, uint32_t* lo, uint32_t* hi) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
+
   uint64_t i;
   memcpy(&i, &d, 8);
 
@@ -1679,41 +1689,49 @@ void Assembler::DoubleAsTwoUInt32(double d, uint32_t* lo, uint32_t* hi) {
 // Arithmetic.
 
 void Assembler::add_d(FPURegister fd, FPURegister fs, FPURegister ft) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, ft, fs, fd, ADD_D);
 }
 
 
 void Assembler::sub_d(FPURegister fd, FPURegister fs, FPURegister ft) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, ft, fs, fd, SUB_D);
 }
 
 
 void Assembler::mul_d(FPURegister fd, FPURegister fs, FPURegister ft) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, ft, fs, fd, MUL_D);
 }
 
 
 void Assembler::div_d(FPURegister fd, FPURegister fs, FPURegister ft) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, ft, fs, fd, DIV_D);
 }
 
 
 void Assembler::abs_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, ABS_D);
 }
 
 
 void Assembler::mov_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, MOV_D);
 }
 
 
 void Assembler::neg_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, NEG_D);
 }
 
 
 void Assembler::sqrt_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, SQRT_D);
 }
 
@@ -1721,110 +1739,131 @@ void Assembler::sqrt_d(FPURegister fd, FPURegister fs) {
 // Conversions.
 
 void Assembler::cvt_w_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, CVT_W_S);
 }
 
 
 void Assembler::cvt_w_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, CVT_W_D);
 }
 
 
 void Assembler::trunc_w_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, TRUNC_W_S);
 }
 
 
 void Assembler::trunc_w_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_W_D);
 }
 
 
 void Assembler::round_w_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, ROUND_W_S);
 }
 
 
 void Assembler::round_w_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, ROUND_W_D);
 }
 
 
 void Assembler::floor_w_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, FLOOR_W_S);
 }
 
 
 void Assembler::floor_w_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, FLOOR_W_D);
 }
 
 
 void Assembler::ceil_w_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, CEIL_W_S);
 }
 
 
 void Assembler::ceil_w_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, CEIL_W_D);
 }
 
 
 void Assembler::cvt_l_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, S, f0, fs, fd, CVT_L_S);
 }
 
 
 void Assembler::cvt_l_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, D, f0, fs, fd, CVT_L_D);
 }
 
 
 void Assembler::trunc_l_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, S, f0, fs, fd, TRUNC_L_S);
 }
 
 
 void Assembler::trunc_l_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_L_D);
 }
 
 
 void Assembler::round_l_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, ROUND_L_S);
 }
 
 
 void Assembler::round_l_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, ROUND_L_D);
 }
 
 
 void Assembler::floor_l_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, FLOOR_L_S);
 }
 
 
 void Assembler::floor_l_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, FLOOR_L_D);
 }
 
 
 void Assembler::ceil_l_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, CEIL_L_S);
 }
 
 
 void Assembler::ceil_l_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, CEIL_L_D);
 }
 
 
 void Assembler::cvt_s_w(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, W, f0, fs, fd, CVT_S_W);
 }
 
@@ -1836,22 +1875,26 @@ void Assembler::cvt_s_l(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_s_d(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, D, f0, fs, fd, CVT_S_D);
 }
 
 
 void Assembler::cvt_d_w(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, W, f0, fs, fd, CVT_D_W);
 }
 
 
 void Assembler::cvt_d_l(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(COP1, L, f0, fs, fd, CVT_D_L);
 }
 
 
 void Assembler::cvt_d_s(FPURegister fd, FPURegister fs) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   GenInstrRegister(COP1, S, f0, fs, fd, CVT_D_S);
 }
 

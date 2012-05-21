@@ -418,9 +418,9 @@ class CpuFeatures : public AllStatic {
   }
 
 
-#ifdef DEBUG
   // Check whether a feature is currently enabled.
   static bool IsEnabled(CpuFeature f) {
+#ifdef DEBUG
     ASSERT(initialized_);
     Isolate* isolate = Isolate::UncheckedCurrent();
     if (isolate == NULL) {
@@ -430,8 +430,10 @@ class CpuFeatures : public AllStatic {
     }
     unsigned enabled = static_cast<unsigned>(isolate->enabled_cpu_features());
     return (enabled & (1u << f)) != 0;
-  }
+#else
+    return IsSupported(f);
 #endif
+  }
 
   // Enable a specified feature within a scope.
   class Scope BASE_EMBEDDED {
