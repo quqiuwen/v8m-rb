@@ -777,18 +777,17 @@ void MipsDebugger::Debug() {
 
 #define _MSG "MIPS simu: FPU instruction (0x%0x) found at pc: 0x%0x in softfloat mode"
 static void CheckSoftfloatFPU(Simulator* simu, Instruction* instr) {
-  if (!CpuFeatures::IsEnabled(FPU)) {
+//#if defined(DEBUG) && defined(CAN_USE_FPU_INSTRUCTIONS)
+//  CpuFeatures::Scope s(FPU);
+//#endif
+  if (!CpuFeatures::IsSupported(FPU)) {//IsEnabled(FPU)) {
     int32_t current_pc = simu->get_pc();
 #ifdef DEBUG
-    //if (!CpuFeatures::IsEnabled(FPU)) {
     PrintF(_MSG"\n", instr->InstructionBits(), current_pc);
     MipsDebugger dbg(simu);
     dbg.Debug();
-    //}
 #else
-    //if (!CpuFeatures::IsSupported(FPU)) {
     V8_Fatal("", 0, _MSG, instr->InstructionBits(), current_pc);
-    //}
 #endif
   }
 }
