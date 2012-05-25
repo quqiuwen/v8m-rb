@@ -218,9 +218,6 @@ LIBRARY_FLAGS = {
       'LINKFLAGS':    ['-m32'],
       'mipsabi:softfloat': {
         'CPPDEFINES':    ['__mips_soft_float=1'],
-        'fpu:on': {
-          'CPPDEFINES' : ['CAN_USE_FPU_INSTRUCTIONS']
-        }
       },
       'mipsabi:hardfloat': {
         'CPPDEFINES':    ['__mips_hard_float=1', 'CAN_USE_FPU_INSTRUCTIONS'],
