@@ -145,6 +145,9 @@ def BuildOptions():
                     default=False, action="store_true")
   result.add_option("--warn-unused", help="Report unused rules",
                     default=False, action="store_true")
+  result.add_option("--xmlout", help="File name of the UnitTest output")
+  result.add_option("--xmltestsuite", help="Testsuite name in the UnitTest",
+                    default="v8tests")
   return result
 
 
@@ -332,6 +335,9 @@ def Execute(arch, mode, args, options, suites, workspace):
   try:
     start_time = time.time()
     progress_indicator = progress.PROGRESS_INDICATORS[options.progress]()
+    if options.xmlout:
+      progress_indicator = progress.UnitTestProgressIndicator(
+          progress_indicator, options.xmlout, options.xmltestsuite)
 
     run_networked = not options.no_network
     if not run_networked:
