@@ -1314,6 +1314,7 @@ void LCodeGen::DoMultiplyAddD(LMultiplyAddD* instr) {
   DoubleRegister addend = ToDoubleRegister(instr->addend());
   DoubleRegister multiplier = ToDoubleRegister(instr->multiplier());
   DoubleRegister multiplicand = ToDoubleRegister(instr->multiplicand());
+  CpuFeatureScope scope(masm(), FPU);
 
   // This is computed in-place.
   ASSERT(addend.is(ToDoubleRegister(instr->result())));
@@ -5061,6 +5062,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
                         scratch2,
                         scratch3);
   } else {
+    CpuFeatureScope scope(masm(), FPU);
     // Deoptimize if we don't have a heap number.
     DeoptimizeIf(ne, instr->environment(), scratch1, Operand(at));
 
