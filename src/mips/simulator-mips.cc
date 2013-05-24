@@ -1556,7 +1556,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       } else {
         SimulatorRuntimeDirectApiCallNew target =
             reinterpret_cast<SimulatorRuntimeDirectApiCallNew>(external);
-        target(arg1);
+        target(arg0);
       }
     } else if (
         redirection->type() == ExternalReference::DIRECT_GETTER_CALL ||
@@ -1575,7 +1575,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       } else {
         SimulatorRuntimeDirectGetterCallNew target =
             reinterpret_cast<SimulatorRuntimeDirectGetterCallNew>(external);
-        target(arg1, arg2);
+        target(arg0, arg1);
       }
     } else {
       SimulatorRuntimeCall target =
