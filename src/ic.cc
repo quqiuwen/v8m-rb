@@ -174,16 +174,17 @@ static bool TryRemoveInvalidPrototypeDependentStub(Code* target,
   InlineCacheHolderFlag cache_holder =
       Code::ExtractCacheHolderFromFlags(target->flags());
 
+  Isolate* isolate = target->GetIsolate();
   if (cache_holder == OWN_MAP && !receiver->IsJSObject()) {
     // The stub was generated for JSObject but called for non-JSObject.
     // IC::GetCodeCacheHolder is not applicable.
     return false;
   } else if (cache_holder == PROTOTYPE_MAP &&
-             receiver->GetPrototype()->IsNull()) {
+             receiver->GetPrototype(isolate)->IsNull()) {
     // IC::GetCodeCacheHolder is not applicable.
     return false;
   }
-  Map* map = IC::GetCodeCacheHolder(receiver, cache_holder)->map();
+  Map* map = IC::GetCodeCacheHolder(isolate, receiver, cache_holder)->map();
 
   // Decide whether the inline cache failed because of changes to the
   // receiver itself or changes to one of its prototypes.
@@ -734,7 +735,7 @@ void CallICBase::UpdateCaches(LookupResult* lookup,
       // GenerateMonomorphicCacheProbe. It is not the map which holds the stub.
       Handle<JSObject> cache_object = object->IsJSObject()
           ? Handle<JSObject>::cast(object)
-          : Handle<JSObject>(JSObject::cast(object->GetPrototype()));
+          : Handle<JSObject>(JSObject::cast(object->GetPrototype(isolate())));
       // Update the stub cache.
       UpdateMegamorphicCache(cache_object->map(), *name, *code);
       break;
@@ -822,10 +823,10 @@ MaybeObject* LoadIC::Load(State state,
         stub = pre_monomorphic_stub();
       } else if (state == PREMONOMORPHIC) {
         StringLengthStub string_length_stub(kind(), !object->IsString());
-        stub = string_length_stub.GetCode();
+        stub = string_length_stub.GetCode(isolate());
       } else if (state == MONOMORPHIC && object->IsStringWrapper()) {
         StringLengthStub string_length_stub(kind(), true);
-        stub = string_length_stub.GetCode();
+        stub = string_length_stub.GetCode(isolate());
       } else if (state != MEGAMORPHIC) {
         ASSERT(state != GENERIC);
         stub = megamorphic_stub();
@@ -851,7 +852,7 @@ MaybeObject* LoadIC::Load(State state,
         stub = pre_monomorphic_stub();
       } else if (state == PREMONOMORPHIC) {
         ArrayLengthStub array_length_stub(kind());
-        stub = array_length_stub.GetCode();
+        stub = array_length_stub.GetCode(isolate());
       } else if (state != MEGAMORPHIC) {
         ASSERT(state != GENERIC);
         stub = megamorphic_stub();
@@ -874,7 +875,7 @@ MaybeObject* LoadIC::Load(State state,
         stub = pre_monomorphic_stub();
       } else if (state == PREMONOMORPHIC) {
         FunctionPrototypeStub function_prototype_stub(kind());
-        stub = function_prototype_stub.GetCode();
+        stub = function_prototype_stub.GetCode(isolate());
       } else if (state != MEGAMORPHIC) {
         ASSERT(state != GENERIC);
         stub = megamorphic_stub();
@@ -1398,7 +1399,8 @@ MaybeObject* StoreIC::Store(State state,
       name->Equals(isolate()->heap()->length_symbol()) &&
       Handle<JSArray>::cast(receiver)->AllowsSetElementsLength() &&
       receiver->HasFastProperties()) {
-    Handle<Code> stub = StoreArrayLengthStub(kind(), strict_mode).GetCode();
+    Handle<Code> stub =
+        StoreArrayLengthStub(kind(), strict_mode).GetCode(isolate());
     set_target(*stub);
     TRACE_IC("StoreIC", name, state, *stub);
     return receiver->SetProperty(*name, *value, NONE, strict_mode, store_mode);
@@ -2147,7 +2149,7 @@ RUNTIME_FUNCTION(MaybeObject*, UnaryOp_Patch) {
   type = UnaryOpIC::ComputeNewType(type, previous_type);
 
   UnaryOpStub stub(op, mode, type);
-  Handle<Code> code = stub.GetCode();
+  Handle<Code> code = stub.GetCode(isolate);
   if (!code.is_null()) {
     if (FLAG_trace_ic) {
       PrintF("[UnaryOpIC in ");
@@ -2275,7 +2277,7 @@ RUNTIME_FUNCTION(MaybeObject*, BinaryOp_Patch) {
   }
 
   BinaryOpStub stub(key, new_left, new_right, result_type);
-  Handle<Code> code = stub.GetCode();
+  Handle<Code> code = stub.GetCode(isolate);
   if (!code.is_null()) {
 #ifdef DEBUG
     if (FLAG_trace_ic) {
@@ -2365,9 +2367,9 @@ Code* CompareIC::GetRawUninitialized(Token::Value op) {
 }
 
 
-Handle<Code> CompareIC::GetUninitialized(Token::Value op) {
+Handle<Code> CompareIC::GetUninitialized(Isolate* isolate, Token::Value op) {
   ICCompareStub stub(op, UNINITIALIZED, UNINITIALIZED, UNINITIALIZED);
-  return stub.GetCode();
+  return stub.GetCode(isolate);
 }
 
 
@@ -2494,7 +2496,7 @@ void CompareIC::UpdateCaches(Handle<Object> x, Handle<Object> y) {
   if (state == KNOWN_OBJECTS) {
     stub.set_known_map(Handle<Map>(Handle<JSObject>::cast(x)->map()));
   }
-  set_target(*stub.GetCode());
+  set_target(*stub.GetCode(isolate()));
 
 #ifdef DEBUG
   if (FLAG_trace_ic) {
@@ -2508,7 +2510,7 @@ void CompareIC::UpdateCaches(Handle<Object> x, Handle<Object> y) {
            GetStateName(new_right),
            GetStateName(state),
            Token::Name(op_),
-           static_cast<void*>(*stub.GetCode()));
+           static_cast<void*>(*stub.GetCode(isolate())));
   }
 #endif
 
@@ -2542,7 +2544,7 @@ RUNTIME_FUNCTION(MaybeObject*, ToBoolean_Patch) {
   old_types.TraceTransition(new_types);
 
   ToBooleanStub stub(tos, new_types);
-  Handle<Code> code = stub.GetCode();
+  Handle<Code> code = stub.GetCode(isolate);
   ToBooleanIC ic(isolate);
   ic.patch(*code);
   return Smi::FromInt(to_boolean_value ? 1 : 0);
