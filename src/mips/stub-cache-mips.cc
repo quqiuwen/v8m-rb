@@ -891,7 +891,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
                       Register scratch1,
                       Register scratch2,
                       Register scratch3,
-                      Handle<String> name,
+                      Handle<Name> name,
                       Handle<JSObject> interceptor_holder,
                       Label* miss_label) {
     Register holder =
@@ -1249,18 +1249,12 @@ void BaseLoadStubCompiler::NonexistentHandlerFrontend(
     Handle<GlobalObject> global) {
   Label miss;
 
-<<<<<<< HEAD
   Register reg = HandlerFrontendHeader(object, receiver(), last, name, &miss);
-=======
-  Register reg = HandlerFrontendHeader(
-      object, receiver(), last, name, &miss, PERFORM_INITIAL_CHECKS);
->>>>>>> 0e64f280752f1f092fdee8a07738ce0e6760306a
 
   // If the last object in the prototype chain is a global object,
   // check that the global property cell is empty.
   if (!global.is_null()) {
     GenerateCheckPropertyCell(masm(), global, name, scratch2(), &miss);
-<<<<<<< HEAD
   }
 
   if (!last->HasFastProperties()) {
@@ -1270,17 +1264,6 @@ void BaseLoadStubCompiler::NonexistentHandlerFrontend(
         Operand(isolate()->factory()->null_value()));
   }
 
-=======
-  }
-
-  if (!last->HasFastProperties()) {
-    __ lw(scratch2(), FieldMemOperand(reg, HeapObject::kMapOffset));
-    __ lw(scratch2(), FieldMemOperand(scratch2(), Map::kPrototypeOffset));
-    __ Branch(&miss, ne, scratch2(),
-        Operand(isolate()->factory()->null_value()));
-  }
-
->>>>>>> 0e64f280752f1f092fdee8a07738ce0e6760306a
   HandlerFrontendFooter(success, &miss);
 }
 
@@ -2667,7 +2650,6 @@ Handle<Code> StoreStubCompiler::CompileStoreField(Handle<JSObject> object,
                      a1, a2, a3, t0,
                      &miss);
   __ bind(&miss);
-  __ li(a2, Operand(Handle<String>(name)));  // Restore name.
   Handle<Code> ic = masm()->isolate()->builtins()->Builtins::StoreIC_Miss();
   __ Jump(ic, RelocInfo::CODE_TARGET);
 
@@ -2967,15 +2949,10 @@ Handle<Code> LoadStubCompiler::CompileLoadGlobal(
     bool is_dont_delete) {
   Label success, miss;
 
-<<<<<<< HEAD
   __ CheckMap(
       receiver(), scratch1(), Handle<Map>(object->map()), &miss, DO_SMI_CHECK);
   HandlerFrontendHeader(
       object, receiver(), Handle<JSObject>::cast(global), name, &miss);
-=======
-  HandlerFrontendHeader(object, receiver(), Handle<JSObject>::cast(global),
-                        name, &miss, PERFORM_INITIAL_CHECKS);
->>>>>>> 0e64f280752f1f092fdee8a07738ce0e6760306a
 
   // Get the value from the cell.
   __ li(a3, Operand(cell));
