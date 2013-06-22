@@ -348,6 +348,7 @@ void Deoptimizer::DoComputeOsrOutputFrame() {
   }
 }
 
+
 void Deoptimizer::DoComputeCompiledStubFrame(TranslationIterator* iterator,
                                              int frame_index) {
   //

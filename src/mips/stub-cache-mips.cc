@@ -1248,12 +1248,18 @@ void BaseLoadStubCompiler::NonexistentHandlerFrontend(
     Handle<GlobalObject> global) {
   Label miss;
 
+<<<<<<< HEAD
   Register reg = HandlerFrontendHeader(object, receiver(), last, name, &miss);
+=======
+  Register reg = HandlerFrontendHeader(
+      object, receiver(), last, name, &miss, PERFORM_INITIAL_CHECKS);
+>>>>>>> 0e64f280752f1f092fdee8a07738ce0e6760306a
 
   // If the last object in the prototype chain is a global object,
   // check that the global property cell is empty.
   if (!global.is_null()) {
     GenerateCheckPropertyCell(masm(), global, name, scratch2(), &miss);
+<<<<<<< HEAD
   }
 
   if (!last->HasFastProperties()) {
@@ -1263,6 +1269,17 @@ void BaseLoadStubCompiler::NonexistentHandlerFrontend(
         Operand(isolate()->factory()->null_value()));
   }
 
+=======
+  }
+
+  if (!last->HasFastProperties()) {
+    __ lw(scratch2(), FieldMemOperand(reg, HeapObject::kMapOffset));
+    __ lw(scratch2(), FieldMemOperand(scratch2(), Map::kPrototypeOffset));
+    __ Branch(&miss, ne, scratch2(),
+        Operand(isolate()->factory()->null_value()));
+  }
+
+>>>>>>> 0e64f280752f1f092fdee8a07738ce0e6760306a
   HandlerFrontendFooter(success, &miss);
 }
 
@@ -2948,10 +2965,15 @@ Handle<Code> LoadStubCompiler::CompileLoadGlobal(
     bool is_dont_delete) {
   Label success, miss;
 
+<<<<<<< HEAD
   __ CheckMap(
       receiver(), scratch1(), Handle<Map>(object->map()), &miss, DO_SMI_CHECK);
   HandlerFrontendHeader(
       object, receiver(), Handle<JSObject>::cast(global), name, &miss);
+=======
+  HandlerFrontendHeader(object, receiver(), Handle<JSObject>::cast(global),
+                        name, &miss, PERFORM_INITIAL_CHECKS);
+>>>>>>> 0e64f280752f1f092fdee8a07738ce0e6760306a
 
   // Get the value from the cell.
   __ li(a3, Operand(cell));
