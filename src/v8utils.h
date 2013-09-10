@@ -284,6 +284,53 @@ inline void MemsetPointer(T** dest, U* value, int counter) {
       : "+&c" (counter), "+&D" (dest)
       : "a" (value)
       : "memory", "cc");
+#elif defined(V8_HOST_ARCH_MIPS)
+  {
+    int i = 0;
+    int mod = 0;
+    int cc = counter;
+    unsigned long mask = (unsigned long)15;
+    T** temp = dest;
+    while(((unsigned long) temp & mask) != 0 && i < counter) {
+      *temp = value;
+      i++;
+      temp++;
+     }
+    counter = counter - i;
+    if(counter > 0) {
+      mod = counter % 4;
+      counter = counter - mod;
+      if(mod) {
+        for(i = 1; i <= mod; i++) {
+          dest[cc-i] = value;
+         }
+       }
+      if(counter) {
+        asm volatile
+         (
+          //".set mips64\n\t"
+          ".set arch=loongson3a\n\t"
+          "move $24,%1\n\t"
+          "drol $24,$24,32\n\t"
+          "or $24,$24,%1\n\t"
+          "ld $0,0(%0)\n\t"
+          "ld $0,32(%0)\n\t"
+          "ld $0,64(%0)\n\t"
+          "ld $0,96(%0)\n\t"
+          "gsSQ $24,$24,0(%0)\n\t"
+          "addiu %2,%2,-4\n\t"
+          "ld $0,128(%0)\n\t"
+          "addiu %0,%0,16\n\t"
+          "bge %2,4,-24\n\t"
+          ".set mips32r2\n\t"
+          //".set mips3\n\t"
+         :
+        :"r"(temp),"r"(value),"r"(counter)
+         :"$24","$0"
+        );
+      }
+   }
+  }
 #else
   for (int i = 0; i < counter; i++) {
     dest[i] = value;
