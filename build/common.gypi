@@ -66,6 +66,8 @@
     'v8_use_mips_abi_hardfloat%': 'true',
 
     # Default arch variant for MIPS.
+    # Loongson3A support mips32r2, use mips32r2 option on loongson3A so that the compiler of v8 
+    # will generates efficient instructions such as mul etc...
     'mips_arch_variant%': 'mips32r2',
 
     'v8_enable_debugger_support%': 1,
@@ -259,7 +261,10 @@
                     'ldflags': ['-msoft-float'],
                   }],
                   ['mips_arch_variant=="mips32r2"', {
-                    'cflags': ['-mips32r2', '-Wa,-mips32r2'],
+                   # Loongson3A support mips32r2, set 'mips_arch_variant' to mips32r2 so that the compiler of v8 
+                   # will generates efficient instructions such as mul etc...  I do not know why I can not use -mips32r2 here
+                   # 'cflags': ['-mips32r2', '-Wa,-mips32r2'],
+                    'cflags': ['-mips3', '-Wa,-mips3'],
                   }],
                   ['mips_arch_variant=="mips32r1"', {
                     'cflags': ['-mips32', '-Wa,-mips32'],
