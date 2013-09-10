@@ -2715,7 +2715,8 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
 /* check whether the address of heap number is 64-bit alignment */
 
 /* 
- * In version 3.20 of v8, the generated code here will be called frequently,
+ * In version 3.20 of v8, the generated code here will be called frequently, when
+ * run RayTrace.
  * but in version 3.18, it has never been called.
  * In version 3.20, because of the 'object' is non-64-bit alignment, ldc1 has
  * much worse performance than two lwc1 on loogson3a.(the result is right)
