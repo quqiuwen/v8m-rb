@@ -1750,12 +1750,30 @@ STATIC_ASSERT((FixedDoubleArray::kHeaderSize & kDoubleAlignmentMask) == 0);
 INLINE(static HeapObject* EnsureDoubleAligned(Heap* heap,
                                               HeapObject* object,
                                               int size));
+INLINE(static HeapObject* Ensure4NON8Aligned(Heap* heap,
+                                              HeapObject* object,
+                                              int size));
 
 static HeapObject* EnsureDoubleAligned(Heap* heap,
                                        HeapObject* object,
                                        int size) {
   if ((OffsetFrom(object->address()) & kDoubleAlignmentMask) != 0) {
     heap->CreateFillerObjectAt(object->address(), kPointerSize);
+    return HeapObject::FromAddress(object->address() + kPointerSize);
+  } else {
+    heap->CreateFillerObjectAt(object->address() + size - kPointerSize,
+                               kPointerSize);
+    return object;
+  }
+}
+
+// Ensure heap number 32-bit aligned, but non-64-bit aligned
+ // to ensure the value of a heap number object is 64-bit aligned. 
+static HeapObject* Ensure4NON8Aligned(Heap* heap,
+                                       HeapObject* object,
+                                       int size) {
+  if ((OffsetFrom(object->address()) & kDoubleAlignmentMask) == 0) {
+    heap->CreateFillerObjectAt(object->address(), kPointerSize);  
     return HeapObject::FromAddress(object->address() + kPointerSize);
   } else {
     heap->CreateFillerObjectAt(object->address() + size - kPointerSize,
@@ -2630,10 +2648,11 @@ MaybeObject* Heap::AllocateHeapNumber(double value, PretenureFlag pretenure) {
 
   Object* result;
   { MaybeObject* maybe_result =
-        AllocateRaw(HeapNumber::kSize, space, OLD_DATA_SPACE);
+        AllocateRaw(HeapNumber::kSize+4, space, OLD_DATA_SPACE);
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
 
+  result = Ensure4NON8Aligned(this,HeapObject::cast(result),HeapNumber::kSize+4);
   HeapObject::cast(result)->set_map_no_write_barrier(heap_number_map());
   HeapNumber::cast(result)->set_value(value);
   return result;
@@ -2649,9 +2668,11 @@ MaybeObject* Heap::AllocateHeapNumber(double value) {
   STATIC_ASSERT(HeapNumber::kSize <= Page::kMaxNonCodeHeapObjectSize);
   ASSERT(allocation_allowed_ && gc_state_ == NOT_IN_GC);
   Object* result;
-  { MaybeObject* maybe_result = new_space_.AllocateRaw(HeapNumber::kSize);
+  { MaybeObject* maybe_result = new_space_.AllocateRaw(HeapNumber::kSize+4);
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
+
+  result = Ensure4NON8Aligned(this,HeapObject::cast(result),HeapNumber::kSize+4);
   HeapObject::cast(result)->set_map_no_write_barrier(heap_number_map());
   HeapNumber::cast(result)->set_value(value);
   return result;
