@@ -28,6 +28,13 @@
 #ifndef V8_STRING_SEARCH_H_
 #define V8_STRING_SEARCH_H_
 
+#if defined(V8_HOST_ARCH_MIPS)
+extern "C"
+{
+    void* lmemchr(const void *s1, int ch, size_t n);
+}
+#endif
+
 namespace v8 {
 namespace internal {
 
@@ -224,9 +231,15 @@ int StringSearch<PatternChar, SubjectChar>::SingleCharSearch(
   int i = index;
   if (sizeof(SubjectChar) == 1 && sizeof(PatternChar) == 1) {
     const SubjectChar* pos = reinterpret_cast<const SubjectChar*>(
-        memchr(subject.start() + i,
-               pattern_first_char,
-               subject.length() - i));
+        #if defined(V8_HOST_ARCH_MIPS)
+          lmemchr(subject.start() + i,
+                 pattern_first_char,
+                 subject.length() - i));
+        #else
+          memchr(subject.start() + i,
+                 pattern_first_char,
+                 subject.length() - i));
+        #endif
     if (pos == NULL) return -1;
     return static_cast<int>(pos - subject.start());
   } else {
@@ -280,9 +293,15 @@ int StringSearch<PatternChar, SubjectChar>::LinearSearch(
   while (i <= n) {
     if (sizeof(SubjectChar) == 1 && sizeof(PatternChar) == 1) {
       const SubjectChar* pos = reinterpret_cast<const SubjectChar*>(
-          memchr(subject.start() + i,
-                 pattern_first_char,
-                 n - i + 1));
+          #if defined(V8_HOST_ARCH_MIPS)
+            lmemchr(subject.start() + i,
+                   pattern_first_char,
+                   n - i + 1));
+          #else
+            memchr(subject.start() + i,
+                   pattern_first_char,
+                   n - i + 1));
+          #endif
       if (pos == NULL) return -1;
       i = static_cast<int>(pos - subject.start()) + 1;
     } else {
@@ -531,9 +550,15 @@ int StringSearch<PatternChar, SubjectChar>::InitialSearch(
     if (badness <= 0) {
       if (sizeof(SubjectChar) == 1 && sizeof(PatternChar) == 1) {
         const SubjectChar* pos = reinterpret_cast<const SubjectChar*>(
-            memchr(subject.start() + i,
-                   pattern_first_char,
-                   n - i + 1));
+             #if defined(V8_HOST_ARCH_MIPS)
+                lmemchr(subject.start() + i,
+                    pattern_first_char,
+                    n - i + 1));
+             #else
+                memchr(subject.start() + i,
+                    pattern_first_char,
+                    n - i + 1));
+             #endif
         if (pos == NULL) {
           return -1;
         }

@@ -31,6 +31,13 @@
 #include "utils.h"
 #include "platform.h"  // For va_list on Solaris.
 
+#if defined(V8_HOST_ARCH_MIPS)
+extern "C"
+{
+    void* lmemcpy(void* dest, const void* src, size_t n);
+}
+#endif
+
 namespace v8 {
 namespace internal {
 
@@ -328,9 +335,15 @@ void CopyChars(sinkchar* dest, const sourcechar* src, int chars) {
   ASSERT(sizeof(sinkchar) <= 2);
   if (sizeof(sinkchar) == 1) {
     if (sizeof(sourcechar) == 1) {
-      CopyCharsUnsigned(reinterpret_cast<uint8_t*>(dest),
+         #if defined(V8_HOST_ARCH_MIPS)
+             lmemcpy(reinterpret_cast<uint8_t*>(dest),
                         reinterpret_cast<const uint8_t*>(src),
                         chars);
+         #else
+             CopyCharsUnsigned(reinterpret_cast<uint8_t*>(dest),
+                        reinterpret_cast<const uint8_t*>(src),
+                        chars);
+         #endif
     } else {
       CopyCharsUnsigned(reinterpret_cast<uint8_t*>(dest),
                         reinterpret_cast<const uint16_t*>(src),
@@ -342,9 +355,15 @@ void CopyChars(sinkchar* dest, const sourcechar* src, int chars) {
                         reinterpret_cast<const uint8_t*>(src),
                         chars);
     } else {
-      CopyCharsUnsigned(reinterpret_cast<uint16_t*>(dest),
+        #if defined(V8_HOST_ARCH_MIPS)
+            lmemcpy(reinterpret_cast<uint16_t*>(dest),
+                      reinterpret_cast<const uint16_t*>(src),
+                        chars);
+        #else
+            CopyCharsUnsigned(reinterpret_cast<uint16_t*>(dest),
                         reinterpret_cast<const uint16_t*>(src),
                         chars);
+        #endif
     }
   }
 }
