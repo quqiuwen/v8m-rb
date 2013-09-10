@@ -2711,6 +2711,38 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
     __ cvt_d_w(result, flt_scratch);
     __ Branch(&done);
     __ bind(&load_from_heap_number);
+
+/* check whether the address of heap number is 64-bit alignment */
+
+/* 
+ * In version 3.20 of v8, the generated code here will be called frequently,
+ * but in version 3.18, it has never been called.
+ * In version 3.20, because of the 'object' is non-64-bit alignment, ldc1 has
+ * much worse performance than two lwc1 on loogson3a.(the result is right)
+ */
+#if 0  
+    
+    static char oaddress[] = {'o','b','j',' ','a','d','d','r','e','s','s',' ','i','s',' ', ':',' ','0','x','%','x',' ',' ','\n','\000'};
+
+    int oaddressi = (int)oaddress;
+    int padd = (int)(printf);
+
+  
+    __ MultiPush(kJSCallerSaved |kCalleeSaved| ra.bit());
+    __ MultiPush(kCallerSavedFPU);
+    __ MultiPush(kCalleeSavedFPU);
+
+    __ li(a0, Operand(oaddressi));
+    __ mov(a1, object);   
+    __ li(v0, Operand(padd)); 
+    __ jalr(v0);
+    __ nop();
+
+    __ MultiPop(kCalleeSavedFPU);
+    __ MultiPop(kCallerSavedFPU);
+    __ MultiPop(kJSCallerSaved |kCalleeSaved| ra.bit());
+#endif
+
     __ ldc1(result, FieldMemOperand(temp, HeapNumber::kValueOffset));
     __ bind(&done);
   }
