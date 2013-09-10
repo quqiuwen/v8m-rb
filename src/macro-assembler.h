@@ -54,6 +54,11 @@ enum AllocationFlags {
   PRETENURE_OLD_POINTER_SPACE = 1 << 4,
   // Directly allocate in old data space
   PRETENURE_OLD_DATA_SPACE = 1 << 5
+  /*
+   * Because a heapnumber object has a 32-bit head, and the value's offset is 32-bit(on 32-bit machine), 
+   * Maybe there must have a flag means the allocate target is 32-bit alignment, but non-64-bit alignment
+   * so the heap number's value is 64-bit alignment.
+   */
 };
 
 

@@ -481,6 +481,15 @@ class MacroAssembler: public Assembler {
                 Register scratch2,
                 Label* gc_required,
                 AllocationFlags flags);
+ // Add a temp function to allocate heap number 32-bit aligned, but non-64-bit aligned
+ // to ensure the value of a heap number object is 64-bit aligned. 
+ // Maybe add  a flag in AllocationFlags is better. 
+ void AllocateHeapNumber(int object_size,
+                Register result,
+                Register scratch1,
+                Register scratch2,
+                Label* gc_required,
+                AllocationFlags flags);
 
   void Allocate(Register object_size,
                 Register result,

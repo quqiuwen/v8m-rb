@@ -2963,6 +2963,99 @@ void MacroAssembler::Allocate(int object_size,
   }
 }
 
+void MacroAssembler::AllocateHeapNumber(int object_size,
+                              Register result,
+                              Register scratch1,
+                              Register scratch2,
+                              Label* gc_required,
+                              AllocationFlags flags) {
+  if (!FLAG_inline_new) {
+    if (emit_debug_code()) {
+      // Trash the registers to simulate an allocation failure.
+      li(result, 0x7091);
+      li(scratch1, 0x7191);
+      li(scratch2, 0x7291);
+    }
+    jmp(gc_required);
+    return;
+  }
+
+  ASSERT(!result.is(scratch1));
+  ASSERT(!result.is(scratch2));
+  ASSERT(!scratch1.is(scratch2));
+  ASSERT(!scratch1.is(t9));
+  ASSERT(!scratch2.is(t9));
+  ASSERT(!result.is(t9));
+
+  // Make object size into bytes.
+  if ((flags & SIZE_IN_WORDS) != 0) {
+    object_size *= kPointerSize;
+  }
+  ASSERT_EQ(0, object_size & kObjectAlignmentMask);
+
+  // Check relative positions of allocation top and limit addresses.
+  // ARM adds additional checks to make sure the ldm instruction can be
+  // used. On MIPS we don't have ldm so we don't need additional checks either.
+  ExternalReference allocation_top =
+      AllocationUtils::GetAllocationTopReference(isolate(), flags);
+  ExternalReference allocation_limit =
+      AllocationUtils::GetAllocationLimitReference(isolate(), flags);
+
+  intptr_t top   =
+      reinterpret_cast<intptr_t>(allocation_top.address());
+  intptr_t limit =
+      reinterpret_cast<intptr_t>(allocation_limit.address());
+  ASSERT((limit - top) == kPointerSize);
+
+  // Set up allocation top address and object size registers.
+  Register topaddr = scratch1;
+  li(topaddr, Operand(allocation_top));
+
+  // This code stores a temporary value in t9.
+  if ((flags & RESULT_CONTAINS_TOP) == 0) {
+    // Load allocation top into result and allocation limit into t9.
+    lw(result, MemOperand(topaddr));
+    lw(t9, MemOperand(topaddr, kPointerSize));
+  } else {
+    if (emit_debug_code()) {
+      // Assert that result actually contains top on entry. t9 is used
+      // immediately below so this use of t9 does not cause difference with
+      // respect to register content between debug and release mode.
+      lw(t9, MemOperand(topaddr));
+      Check(eq, "Unexpected allocation top", result, Operand(t9));
+    }
+    // Load allocation limit into t9. Result already contains allocation top.
+    lw(t9, MemOperand(topaddr, limit - top));
+  }
+ /*always executed */
+ // if ((flags & DOUBLE_ALIGNMENT) != 0) {
+    // Align the next allocation. Storing the filler map without checking top is
+    // always safe because the limit of the heap is always aligned.
+    ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
+    ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
+    And(scratch2, result, Operand(kDoubleAlignmentMask));
+    Label aligned;
+    /*ne, not eq*/
+    Branch(&aligned, ne, scratch2, Operand(zero_reg));
+    li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
+    sw(scratch2, MemOperand(result));
+    Addu(result, result, Operand(kDoubleSize / 2));
+    bind(&aligned);
+ // }
+
+  // Calculate new top and bail out if new space is exhausted. Use result
+  // to calculate the new top.
+  Addu(scratch2, result, Operand(object_size));
+  Branch(gc_required, Ugreater, scratch2, Operand(t9));
+  sw(scratch2, MemOperand(topaddr));
+
+  // Tag object if requested.
+  if ((flags & TAG_OBJECT) != 0) {
+    Addu(result, result, Operand(kHeapObjectTag));
+  }
+}
+
+
 
 void MacroAssembler::Allocate(Register object_size,
                               Register result,
@@ -3213,8 +3306,11 @@ void MacroAssembler::AllocateHeapNumber(Register result,
                                         TaggingMode tagging_mode) {
   // Allocate an object in the heap for the heap number and tag it as a heap
   // object.
+  /* use AllocateHeapNumber will cause Segmentation fault when run RayTrace, but it run correctly in version 3.20.*/
   Allocate(HeapNumber::kSize, result, scratch1, scratch2, need_gc,
            tagging_mode == TAG_RESULT ? TAG_OBJECT : NO_ALLOCATION_FLAGS);
+  //AllocateHeapNumber(HeapNumber::kSize, result, scratch1, scratch2, need_gc,
+  //         tagging_mode == TAG_RESULT ? TAG_OBJECT : NO_ALLOCATION_FLAGS);
 
   // Store heap number map in the allocated object.
   AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
