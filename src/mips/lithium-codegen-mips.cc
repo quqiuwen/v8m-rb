@@ -5206,6 +5206,9 @@ void LCodeGen::DoAllocate(LAllocate* instr) {
   if (instr->hydrogen()->MustAllocateDoubleAligned()) {
     flags = static_cast<AllocationFlags>(flags | DOUBLE_ALIGNMENT);
   }
+  if (instr->hydrogen()->IsHeapNumberAligned()) {
+    flags = static_cast<AllocationFlags>(flags | HEAP_NUMBER_ALIGNMENT);
+  }
   if (instr->hydrogen()->CanAllocateInOldPointerSpace()) {
     flags = static_cast<AllocationFlags>(flags | PRETENURE_OLD_POINTER_SPACE);
   }
@@ -5256,6 +5259,9 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr, AllocationFlags flags) {
     if ((flags & DOUBLE_ALIGNMENT) != 0) {
       CallRuntimeFromDeferred(
           Runtime::kAllocateInNewSpaceAligned, 1, instr);
+    } else if((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
+       CallRuntimeFromDeferred(
+          Runtime::kAllocateInNewSpaceHeapNumberAligned, 1, instr);
     } else {
       CallRuntimeFromDeferred(
           Runtime::kAllocateInNewSpace, 1, instr);

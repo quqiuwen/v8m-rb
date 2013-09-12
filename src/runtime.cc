@@ -9158,6 +9158,37 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpaceAligned) {
   }
 }
 
+INLINE(static HeapObject* EnsureHeapNumberAligned(Heap* heap,
+                                              HeapObject* object,
+                                              int size));
+
+static HeapObject* EnsureHeapNumberAligned(Heap* heap,
+                                       HeapObject* object,
+                                       int size) {
+  if ((OffsetFrom(object->address()) & kDoubleAlignmentMask) == 0) {
+    heap->CreateFillerObjectAt(object->address(), kPointerSize);
+    return HeapObject::FromAddress(object->address() + kPointerSize);
+  } else {
+    heap->CreateFillerObjectAt(object->address() + size - kPointerSize,
+                               kPointerSize);
+    return object;
+  }
+}
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpaceHeapNumberAligned) {
+  SealHandleScope shs(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_HANDLE_CHECKED(Smi, size_smi, 0);
+  MaybeObject* maybe_allocation = Allocate(isolate, size_smi->value() + kPointerSize, NEW_SPACE);
+  Object* allocat;
+  if (maybe_allocation->ToObject(&allocat)) {
+      HeapObject* object = HeapObject::cast(allocat);
+      object = EnsureHeapNumberAligned(isolate->heap(), object, size_smi->value() + kPointerSize);
+      return object;
+    }
+    return maybe_allocation;
+}
+
 
 RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInOldPointerSpace) {
   // Allocate a block of memory in old pointer space (filled with a filler).

@@ -4912,7 +4912,8 @@ class HAllocate: public HTemplateInstruction<2> {
     CAN_ALLOCATE_IN_NEW_SPACE = 1 << 0,
     CAN_ALLOCATE_IN_OLD_DATA_SPACE = 1 << 1,
     CAN_ALLOCATE_IN_OLD_POINTER_SPACE = 1 << 2,
-    ALLOCATE_DOUBLE_ALIGNED = 1 << 3
+    ALLOCATE_DOUBLE_ALIGNED = 1 << 3,
+    ALLOCATE_HEAP_NUMBER = 1 << 4
   };
 
   HAllocate(HValue* context, HValue* size, HType type, Flags flags)
@@ -4933,7 +4934,12 @@ class HAllocate: public HTemplateInstruction<2> {
     if (IsFastDoubleElementsKind(kind)) {
       flags = static_cast<HAllocate::Flags>(
           flags | HAllocate::ALLOCATE_DOUBLE_ALIGNED);
-    }
+    } 
+   /* v3.20 use instance_type, v3.18 use ElementsKind */
+   /*else if (instance_type == HEAP_NUMBER_TYPE) {
+       flags_ = static_cast<HAllocate::Flags>(flags_ |
+          ALLOCATE_HEAP_NUMBER);
+    }*/
     return flags;
   }
 
@@ -4969,6 +4975,10 @@ class HAllocate: public HTemplateInstruction<2> {
 
   bool GuaranteedInNewSpace() const {
     return CanAllocateInNewSpace() && !CanAllocateInOldSpace();
+  }
+
+ bool IsHeapNumberAligned() const {
+    return (flags_ & ALLOCATE_HEAP_NUMBER) != 0;
   }
 
   bool MustAllocateDoubleAligned() const {

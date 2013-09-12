@@ -103,6 +103,7 @@ namespace internal {
   F(SetNewFunctionAttributes, 1, 1) \
   F(AllocateInNewSpace, 1, 1) \
   F(AllocateInNewSpaceAligned, 1, 1) \
+  F(AllocateInNewSpaceHeapNumberAligned, 1, 1) \
   F(AllocateInOldPointerSpace, 1, 1) \
   F(SetNativeFlag, 1, 1) \
   F(StoreArrayLiteralElement, 5, 1) \
