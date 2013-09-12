@@ -3037,6 +3037,10 @@ void MacroAssembler::AllocateHeapNumber(int object_size,
     Label aligned;
     /*ne, not eq*/
     Branch(&aligned, ne, scratch2, Operand(zero_reg));
+
+    And(scratch2, result, Operand(0x3));
+    Branch(&aligned, eq, scratch2, Operand(zero_reg));     
+
     li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
     sw(scratch2, MemOperand(result));
     Addu(result, result, Operand(kDoubleSize / 2));
@@ -3305,12 +3309,11 @@ void MacroAssembler::AllocateHeapNumber(Register result,
                                         Label* need_gc,
                                         TaggingMode tagging_mode) {
   // Allocate an object in the heap for the heap number and tag it as a heap
-  // object.
-  /* use AllocateHeapNumber will cause Segmentation fault when run RayTrace, but it run correctly in version 3.20.*/
-  Allocate(HeapNumber::kSize, result, scratch1, scratch2, need_gc,
+  // object.  
+  //Allocate(HeapNumber::kSize, result, scratch1, scratch2, need_gc,
+    //       tagging_mode == TAG_RESULT ? TAG_OBJECT : NO_ALLOCATION_FLAGS);
+  AllocateHeapNumber(HeapNumber::kSize, result, scratch1, scratch2, need_gc,
            tagging_mode == TAG_RESULT ? TAG_OBJECT : NO_ALLOCATION_FLAGS);
-  //AllocateHeapNumber(HeapNumber::kSize, result, scratch1, scratch2, need_gc,
-  //         tagging_mode == TAG_RESULT ? TAG_OBJECT : NO_ALLOCATION_FLAGS);
 
   // Store heap number map in the allocated object.
   AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
