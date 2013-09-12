@@ -2671,6 +2671,22 @@ static HeapObject* EnsureDoubleAligned(Heap* heap,
   }
 }
 
+INLINE(static HeapObject* EnsureHeapNumberAligned(Heap* heap,
+                                              HeapObject* object,
+                                              int size));
+
+static HeapObject* EnsureHeapNumberAligned(Heap* heap,
+                                       HeapObject* object,
+                                       int size) {
+  if ((OffsetFrom(object->address()) & kDoubleAlignmentMask) == 0) {
+    heap->CreateFillerObjectAt(object->address(), kPointerSize);
+    return HeapObject::FromAddress(object->address() + kPointerSize);
+  } else {
+    heap->CreateFillerObjectAt(object->address() + size - kPointerSize,
+                               kPointerSize);
+    return object;
+  }
+}
 
 bool MarkCompactCollector::TryPromoteObject(HeapObject* object,
                                             int object_size) {
@@ -2695,7 +2711,7 @@ bool MarkCompactCollector::TryPromoteObject(HeapObject* object,
     ASSERT(target_space == heap()->old_pointer_space() ||
            target_space == heap()->old_data_space());
     int allocation_size = object_size;
-    if(object->IsFixedDoubleArray())  {
+    if(object->IsFixedDoubleArray() || object->IsHeapNumber())  {
       allocation_size += kPointerSize;
     }
     MaybeObject* maybe_result = target_space->AllocateRaw(allocation_size);
@@ -2703,6 +2719,8 @@ bool MarkCompactCollector::TryPromoteObject(HeapObject* object,
       HeapObject* target = HeapObject::cast(result);
       if(object->IsFixedDoubleArray())  {
         target = EnsureDoubleAligned(heap(), target, allocation_size);
+      } else if (object->IsHeapNumber()) {
+          target_object = EnsureHeapNumberAligned(heap(), target_object, allocation_size);
       }
       MigrateObject(target->address(),
                     object->address(),
@@ -2761,7 +2779,7 @@ void MarkCompactCollector::EvacuateNewSpace() {
 
       // Promotion failed. Just migrate object to another semispace.
       int allocation_size = size;
-      if(object->IsFixedDoubleArray())  {
+      if(object->IsFixedDoubleArray() || object->IsHeapNumber())  {
         allocation_size += kPointerSize;
       }
       MaybeObject* allocation = new_space->AllocateRaw(allocation_size);
@@ -2779,7 +2797,9 @@ void MarkCompactCollector::EvacuateNewSpace() {
       HeapObject* target = HeapObject::cast(result);
       if(object->IsFixedDoubleArray())  {
         target = EnsureDoubleAligned(heap(), target, allocation_size);
-      }
+      } else if(object->IsHeapNumber())  {
+        target = EnsureHeapNumberAligned(heap(), target, allocation_size);
+     }
       MigrateObject(target->address(),
                     object->address(),
                     size,
@@ -2831,7 +2851,7 @@ void MarkCompactCollector::EvacuateLiveObjectsFromPage(Page* p) {
 
       int size = object->Size();
       int allocation_size = size;
-      if(object->IsFixedDoubleArray())  {
+      if(object->IsFixedDoubleArray() || object->IsHeapNumber())  {
          allocation_size += kPointerSize;
       }
       MaybeObject* target = space->AllocateRaw(allocation_size);
@@ -2845,7 +2865,9 @@ void MarkCompactCollector::EvacuateLiveObjectsFromPage(Page* p) {
       HeapObject* target_object = HeapObject::cast(result);
       if (object->IsFixedDoubleArray()) {
           target_object = EnsureDoubleAligned(heap(), target_object, allocation_size);
-      }
+      } else if(object->IsHeapNumber())  {
+        target = EnsureHeapNumberAligned(heap(), target, allocation_size);
+     }
 
       MigrateObject(target_object->address(),
                     object_addr,
