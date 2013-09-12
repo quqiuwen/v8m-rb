@@ -597,7 +597,7 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
     // ARM uses a workaround here because of the unaligned HeapNumber
     // kValueOffset. On MIPS this workaround is built into ldc1 so there's no
     // point in generating even more instructions.
-    __ ldc1(dst, FieldMemOperand(object, HeapNumber::kValueOffset));
+    __ ldc1(dst, FieldMemOperand(object, HeapNumber::kValueOffset),true);
   } else {
     ASSERT(destination == kCoreRegisters);
     // Load the double from heap number to dst1 and dst2 in double format.
@@ -713,7 +713,7 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
 
   // Load the number.
   // Load the double value.
-  __ ldc1(double_dst, FieldMemOperand(object, HeapNumber::kValueOffset));
+  __ ldc1(double_dst, FieldMemOperand(object, HeapNumber::kValueOffset),true);
 
   Register except_flag = scratch2;
   __ EmitFPUTruncate(kRoundToZero,
@@ -762,7 +762,7 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
   // Object is a heap number.
   // Convert the floating point value to a 32-bit integer.
   // Load the double value.
-  __ ldc1(double_scratch0, FieldMemOperand(object, HeapNumber::kValueOffset));
+  __ ldc1(double_scratch0, FieldMemOperand(object, HeapNumber::kValueOffset),true);
 
   Register except_flag = scratch2;
   __ EmitFPUTruncate(kRoundToZero,
@@ -823,7 +823,7 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
   // Store answer in the overwritable heap number.
   if (!IsMipsSoftFloatABI) {
     // Double returned in register f0.
-    __ sdc1(f0, FieldMemOperand(heap_number_result, HeapNumber::kValueOffset));
+    __ sdc1(f0, FieldMemOperand(heap_number_result, HeapNumber::kValueOffset),true);
   } else {
     // Double returned in registers v0 and v1.
     __ sw(v1, FieldMemOperand(heap_number_result, HeapNumber::kExponentOffset));
@@ -1047,7 +1047,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   __ sra(at, rhs, kSmiTagSize);
   __ mtc1(at, f14);
   __ cvt_d_w(f14, f14);
-  __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
+  __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset),true);
 
   // We now have both loaded as doubles.
   __ jmp(both_loaded_as_doubles);
@@ -1071,7 +1071,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   __ sra(at, lhs, kSmiTagSize);
   __ mtc1(at, f12);
   __ cvt_d_w(f12, f12);
-  __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+  __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset),true);
   // Fall through to both_loaded_as_doubles.
 }
 
@@ -1130,8 +1130,8 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
 
   // Both are heap numbers. Load them up then jump to the code we have
   // for that.
-  __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
-  __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+  __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset),true);
+  __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset),true);
 
   __ jmp(both_loaded_as_doubles);
 }
@@ -1237,8 +1237,8 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
     __ lw(probe,
            FieldMemOperand(scratch1, FixedArray::kHeaderSize));
     __ JumpIfSmi(probe, not_found);
-    __ ldc1(f12, FieldMemOperand(object, HeapNumber::kValueOffset));
-    __ ldc1(f14, FieldMemOperand(probe, HeapNumber::kValueOffset));
+    __ ldc1(f12, FieldMemOperand(object, HeapNumber::kValueOffset),true);
+    __ ldc1(f14, FieldMemOperand(probe, HeapNumber::kValueOffset),true);
     __ BranchF(&load_result_from_cache, NULL, eq, f12, f14);
     __ Branch(not_found);
   }
@@ -1540,7 +1540,7 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
     __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
     __ Branch(&not_heap_number, ne, map, Operand(at));
     Label zero_or_nan, number;
-    __ ldc1(f2, FieldMemOperand(tos_, HeapNumber::kValueOffset));
+    __ ldc1(f2, FieldMemOperand(tos_, HeapNumber::kValueOffset),true);
     __ BranchF(&number, &zero_or_nan, ne, f2, kDoubleRegZero);
     // "tos_" is a register, and contains a non zero value by default.
     // Hence we only need to overwrite "tos_" with zero to return false for
@@ -1841,7 +1841,7 @@ void UnaryOpStub::GenerateHeapNumberCodeBitNot(
   // Convert the int32 in a1 to the heap number in v0. a2 is corrupted.
   __ mtc1(a1, f0);
   __ cvt_d_w(f0, f0);
-  __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
+  __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset),true);
   __ Ret();
 
   __ bind(&impossible);
@@ -2196,7 +2196,7 @@ void BinaryOpStub_GenerateFPOperation(MacroAssembler* masm,
         // ARM uses a workaround here because of the unaligned HeapNumber
         // kValueOffset. On MIPS this workaround is built into sdc1 so
         // there's no point in generating even more instructions.
-        __ sdc1(f10, FieldMemOperand(result, HeapNumber::kValueOffset));
+        __ sdc1(f10, FieldMemOperand(result, HeapNumber::kValueOffset),true);
         __ Ret(USE_DELAY_SLOT);
         __ mov(v0, result);
       } else {
@@ -2310,7 +2310,7 @@ void BinaryOpStub_GenerateFPOperation(MacroAssembler* masm,
       // ARM uses a workaround here because of the unaligned HeapNumber
       // kValueOffset. On MIPS this workaround is built into sdc1 so
       // there's no point in generating even more instructions.
-      __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
+      __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset),true);
       __ Ret();
       break;
     }
@@ -2562,7 +2562,7 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
                                                   &call_runtime,
                                                   mode_);
         __ mov(v0, heap_number_result);
-        __ sdc1(f10, FieldMemOperand(v0, HeapNumber::kValueOffset));
+        __ sdc1(f10, FieldMemOperand(v0, HeapNumber::kValueOffset),true);
         __ Ret();
 
         // A DIV operation expecting an integer result falls through
@@ -2703,7 +2703,7 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
 
       // Store the result.
       __ mov(v0, heap_number_result);
-      __ sdc1(double_scratch, FieldMemOperand(v0, HeapNumber::kValueOffset));
+      __ sdc1(double_scratch, FieldMemOperand(v0, HeapNumber::kValueOffset),true);
       __ Ret();
 
       break;
@@ -2976,7 +2976,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
     __ mov(v0, t2);
   } else {
     // Load result into f4.
-    __ ldc1(f4, FieldMemOperand(t2, HeapNumber::kValueOffset));
+    __ ldc1(f4, FieldMemOperand(t2, HeapNumber::kValueOffset),true);
   }
   __ Ret();
 
@@ -3006,7 +3006,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
     __ Pop(a3, a2, cache_entry);
     __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
     __ AllocateHeapNumber(t2, scratch0, scratch1, t1, &no_update);
-    __ sdc1(f4, FieldMemOperand(t2, HeapNumber::kValueOffset));
+    __ sdc1(f4, FieldMemOperand(t2, HeapNumber::kValueOffset),true);
 
     __ sw(a2, MemOperand(cache_entry, 0 * kPointerSize));
     __ sw(a3, MemOperand(cache_entry, 1 * kPointerSize));
@@ -3020,13 +3020,13 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
     // cache.
     __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
     __ AllocateHeapNumber(a0, scratch0, scratch1, t1, &skip_cache);
-    __ sdc1(f4, FieldMemOperand(a0, HeapNumber::kValueOffset));
+    __ sdc1(f4, FieldMemOperand(a0, HeapNumber::kValueOffset),true);
     {
       FrameScope scope(masm, StackFrame::INTERNAL);
       __ push(a0);
       __ CallRuntime(RuntimeFunction(), 1);
     }
-    __ ldc1(f4, FieldMemOperand(v0, HeapNumber::kValueOffset));
+    __ ldc1(f4, FieldMemOperand(v0, HeapNumber::kValueOffset),true);
     __ Ret();
 
     __ bind(&skip_cache);
@@ -3143,7 +3143,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     __ lw(scratch, FieldMemOperand(base, JSObject::kMapOffset));
     __ Branch(&call_runtime, ne, scratch, Operand(heapnumbermap));
 
-    __ ldc1(double_base, FieldMemOperand(base, HeapNumber::kValueOffset));
+    __ ldc1(double_base, FieldMemOperand(base, HeapNumber::kValueOffset),true);
     __ jmp(&unpack_exponent);
 
     __ bind(&base_is_smi);
@@ -3154,7 +3154,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     __ UntagAndJumpIfSmi(scratch, exponent, &int_exponent);
 
     __ lw(scratch, FieldMemOperand(exponent, JSObject::kMapOffset));
-    __ Branch(&call_runtime, ne, scratch, Operand(heapnumbermap));
+    __ Branch(&call_runtime, ne, scratch, Operand(heapnumbermap),true);
     __ ldc1(double_exponent,
             FieldMemOperand(exponent, HeapNumber::kValueOffset));
   } else if (exponent_type_ == TAGGED) {
@@ -3162,7 +3162,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     __ UntagAndJumpIfSmi(scratch, exponent, &int_exponent);
 
     __ ldc1(double_exponent,
-            FieldMemOperand(exponent, HeapNumber::kValueOffset));
+            FieldMemOperand(exponent, HeapNumber::kValueOffset),true);
   }
 
   if (exponent_type_ != INTEGER) {
@@ -3306,7 +3306,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     __ AllocateHeapNumber(
         heapnumber, scratch, scratch2, heapnumbermap, &call_runtime);
     __ sdc1(double_result,
-            FieldMemOperand(heapnumber, HeapNumber::kValueOffset));
+            FieldMemOperand(heapnumber, HeapNumber::kValueOffset),true);
     ASSERT(heapnumber.is(v0));
     __ IncrementCounter(counters->math_pow(), 1, scratch, scratch2);
     __ DropAndRet(2);
@@ -6523,7 +6523,7 @@ void ICCompareStub::GenerateNumbers(MacroAssembler* masm) {
   __ CheckMap(a0, a2, Heap::kHeapNumberMapRootIndex, &maybe_undefined1,
               DONT_DO_SMI_CHECK);
   __ Subu(a2, a0, Operand(kHeapObjectTag));
-  __ ldc1(f2, MemOperand(a2, HeapNumber::kValueOffset));
+  __ ldc1(f2, MemOperand(a2, HeapNumber::kValueOffset),true);
   __ Branch(&left);
   __ bind(&right_smi);
   __ SmiUntag(a2, a0);  // Can't clobber a0 yet.
@@ -6536,7 +6536,7 @@ void ICCompareStub::GenerateNumbers(MacroAssembler* masm) {
   __ CheckMap(a1, a2, Heap::kHeapNumberMapRootIndex, &maybe_undefined2,
               DONT_DO_SMI_CHECK);
   __ Subu(a2, a1, Operand(kHeapObjectTag));
-  __ ldc1(f0, MemOperand(a2, HeapNumber::kValueOffset));
+  __ ldc1(f0, MemOperand(a2, HeapNumber::kValueOffset),true);
   __ Branch(&done);
   __ bind(&left_smi);
   __ SmiUntag(a2, a1);  // Can't clobber a1 yet.
