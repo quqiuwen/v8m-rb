@@ -2720,7 +2720,7 @@ bool MarkCompactCollector::TryPromoteObject(HeapObject* object,
       if(object->IsFixedDoubleArray())  {
         target = EnsureDoubleAligned(heap(), target, allocation_size);
       } else if (object->IsHeapNumber()) {
-          target_object = EnsureHeapNumberAligned(heap(), target_object, allocation_size);
+          target = EnsureHeapNumberAligned(heap(), target, allocation_size);
       }
       MigrateObject(target->address(),
                     object->address(),
@@ -2866,7 +2866,7 @@ void MarkCompactCollector::EvacuateLiveObjectsFromPage(Page* p) {
       if (object->IsFixedDoubleArray()) {
           target_object = EnsureDoubleAligned(heap(), target_object, allocation_size);
       } else if(object->IsHeapNumber())  {
-        target = EnsureHeapNumberAligned(heap(), target, allocation_size);
+        target_object = EnsureHeapNumberAligned(heap(), target_object, allocation_size);
      }
 
       MigrateObject(target_object->address(),

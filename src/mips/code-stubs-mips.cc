@@ -3154,9 +3154,9 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     __ UntagAndJumpIfSmi(scratch, exponent, &int_exponent);
 
     __ lw(scratch, FieldMemOperand(exponent, JSObject::kMapOffset));
-    __ Branch(&call_runtime, ne, scratch, Operand(heapnumbermap),true);
+    __ Branch(&call_runtime, ne, scratch, Operand(heapnumbermap));
     __ ldc1(double_exponent,
-            FieldMemOperand(exponent, HeapNumber::kValueOffset));
+            FieldMemOperand(exponent, HeapNumber::kValueOffset),true);
   } else if (exponent_type_ == TAGGED) {
     // Base is already in double_base.
     __ UntagAndJumpIfSmi(scratch, exponent, &int_exponent);
