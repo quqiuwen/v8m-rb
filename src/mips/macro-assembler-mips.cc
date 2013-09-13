@@ -2949,8 +2949,9 @@ void MacroAssembler::Allocate(int object_size,
       Branch(&aligned, eq, scratch2, Operand(zero_reg));
     } else if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
       Branch(&aligned, ne, scratch2, Operand(zero_reg));
-      And(scratch2, result, Operand(0x3));
-      Branch(&aligned, eq, scratch2, Operand(zero_reg));
+      /*page started? sw will cause Segmentation fault.*/
+      And(scratch2, result, Operand(0xfffff));
+      Branch(&aligned, eq, scratch2, Operand(zero_reg));     
      }
     
     li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
@@ -3046,7 +3047,8 @@ void MacroAssembler::AllocateHeapNumber(int object_size,
     /*ne, not eq*/
     Branch(&aligned, ne, scratch2, Operand(zero_reg));
 
-    And(scratch2, result, Operand(0x3));
+    /*page started? sw will cause Segmentation fault.*/
+    And(scratch2, result, Operand(0xfffff));
     Branch(&aligned, eq, scratch2, Operand(zero_reg));     
 
     li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
@@ -3138,8 +3140,9 @@ void MacroAssembler::Allocate(Register object_size,
       Branch(&aligned, eq, scratch2, Operand(zero_reg));
     } else if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
       Branch(&aligned, ne, scratch2, Operand(zero_reg));
-      And(scratch2, result, Operand(0x3));
-      Branch(&aligned, eq, scratch2, Operand(zero_reg));
+      /*page started? sw will cause Segmentation fault.*/
+      And(scratch2, result, Operand(0xfffff));
+      Branch(&aligned, eq, scratch2, Operand(zero_reg));     
      }
     
     li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
