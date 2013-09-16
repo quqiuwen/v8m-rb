@@ -2733,8 +2733,8 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
     __ MultiPush(kCallerSavedFPU);
     __ MultiPush(kCalleeSavedFPU);
 
-    __ li(a0, Operand(oaddressi));
-    __ mov(a1, object);   
+    __ mov(a1, object);  
+    __ li(a0, Operand(oaddressi));     
     __ li(v0, Operand(padd)); 
     __ jalr(v0);
     __ nop();
